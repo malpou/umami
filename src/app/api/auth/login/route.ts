@@ -7,11 +7,18 @@ import { checkPassword } from '@/lib/password';
 import prisma from '@/lib/prisma';
 import redis from '@/lib/redis';
 import { parseRequest } from '@/lib/request';
-import { json, serviceUnavailable, unauthorized } from '@/lib/response';
+import { getOidcConfig } from '@/lib/oidc';
+import { forbidden, json, serviceUnavailable, unauthorized } from '@/lib/response';
 import { getTwoFactorConfigurationError, isTwoFactorConfigured } from '@/lib/two-factor/crypto';
 import { getAllUserTeams, getUserByUsername } from '@/queries/prisma';
 
 export async function POST(request: Request) {
+  const oidc = getOidcConfig();
+
+  if (oidc.enabled && !oidc.allowLocalLogin) {
+    return forbidden({ code: 'local-login-disabled' });
+  }
+
   const schema = z.object({
     username: z.string(),
     password: z.string(),

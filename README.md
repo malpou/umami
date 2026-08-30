@@ -60,6 +60,40 @@ The connection URL format:
 postgresql://username:mypassword@localhost:5432/mydb
 ```
 
+### OIDC / Single Sign-On (optional)
+
+Umami can authenticate users against any OpenID Connect provider (for example [Zitadel](https://zitadel.com))
+using the authorization code flow with PKCE. Users are provisioned automatically on first login, and their
+umami role is derived from role claims in the ID token on **every** login — the identity provider is the
+source of truth for access.
+
+When OIDC is enabled, local password login is disabled (both the login form and the API) unless
+`OIDC_ALLOW_LOCAL_LOGIN` is set.
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `OIDC_ISSUER` | yes | — | Issuer URL; discovery document is read from `<issuer>/.well-known/openid-configuration` |
+| `OIDC_CLIENT_ID` | yes | — | OAuth client ID |
+| `OIDC_CLIENT_SECRET` | no | — | Omit for a public client using PKCE; set for a confidential client |
+| `APP_URL` | yes | — | Public base URL of your umami instance, e.g. `https://analytics.example.com` |
+| `OIDC_ROLE_ADMIN` | * | — | Comma-separated provider role keys mapped to the umami `admin` role |
+| `OIDC_ROLE_USER` | * | — | Comma-separated provider role keys mapped to the umami `user` role |
+| `OIDC_ROLE_VIEW_ONLY` | * | — | Comma-separated provider role keys mapped to the umami `view-only` role |
+| `OIDC_SCOPES` | no | `openid profile email urn:zitadel:iam:org:projects:roles` | Requested scopes |
+| `OIDC_ROLES_CLAIM` | no | `urn:zitadel:iam:org:project:roles` | Claim containing the user's roles (object map, array, or delimited string) |
+| `OIDC_ALLOW_LOCAL_LOGIN` | no | off | Keep username/password login available alongside SSO (break-glass) |
+| `OIDC_PROVIDER_NAME` | no | `SSO` | Name shown on the login button |
+| `OIDC_RP_LOGOUT` | no | off | Also end the identity provider session on logout |
+| `OIDC_AUTO_LINK_USERNAME` | no | off | Link an SSO login to an existing local account with the same username |
+| `OIDC_SESSION_DURATION` | no | `24h` | Lifetime of umami sessions created via SSO (e.g. `12h`, `30m`, `7d`) |
+
+\* At least one of the three role mappings must be set. A user with none of the mapped roles is denied access.
+
+Zitadel setup: create a **Web** application with **PKCE** authentication, set the redirect URI to
+`<APP_URL>/api/auth/oidc/callback` and the post-logout redirect URI to `<APP_URL>/login`, create roles
+(e.g. `umami-admin`, `umami-user`) on the project, grant them to your users, and either enable
+**Assert Roles on Authentication** on the project or rely on the roles scope requested by default.
+
 ### Build the Application
 
 ```bash

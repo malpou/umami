@@ -73,11 +73,47 @@ export async function getUsers(criteria: UserFindManyArgs, filters: QueryFilters
   );
 }
 
+export async function getUserByOidcIdentity(oidcIssuer: string, oidcSubject: string) {
+  return prisma.client.user.findFirst({
+    where: {
+      oidcIssuer,
+      oidcSubject,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      username: true,
+      password: true,
+      role: true,
+      createdAt: true,
+      displayName: true,
+      oidcIssuer: true,
+      oidcSubject: true,
+    },
+  });
+}
+
+export async function getUserForOidcLink(username: string) {
+  return prisma.client.user.findFirst({
+    where: {
+      username: username.toLowerCase(),
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      oidcIssuer: true,
+    },
+  });
+}
+
 export async function createUser(data: {
   id: string;
   username: string;
   password: string;
   role: Role;
+  displayName?: string;
+  oidcIssuer?: string;
+  oidcSubject?: string;
 }) {
   return prisma.client.user.create({
     data,

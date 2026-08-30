@@ -86,6 +86,8 @@ export const labels: Record<string, string> = {
   teamSettings: 'label.team-settings',
   analytics: 'label.analytics',
   login: 'label.login',
+  continueWith: 'label.continue-with',
+  loginWithPassword: 'label.login-with-password',
   logout: 'label.logout',
   singleDay: 'label.single-day',
   dateRange: 'label.date-range',

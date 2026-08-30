@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useLoginQuery } from '@/components/hooks';
 import { LoginForm } from './LoginForm';
+import { SsoLoginForm } from './SsoLoginForm';
 import { PropsWithChildren } from 'react';
 
 export function LoginPageWrapper({ children }: PropsWithChildren) {
@@ -33,10 +34,30 @@ export function LoginPageWrapper({ children }: PropsWithChildren) {
   );
 }
 
-export function LoginPage() {
+export interface LoginPageProps {
+  oidcEnabled?: boolean;
+  oidcProviderName?: string;
+  oidcAuthorizeUrl?: string;
+  allowLocalLogin?: boolean;
+}
+
+export function LoginPage({
+  oidcEnabled,
+  oidcProviderName,
+  oidcAuthorizeUrl,
+  allowLocalLogin = true,
+}: LoginPageProps) {
   return (
     <LoginPageWrapper>
-      <LoginForm />
+      {oidcEnabled ? (
+        <SsoLoginForm
+          providerName={oidcProviderName}
+          authorizeUrl={oidcAuthorizeUrl}
+          allowLocalLogin={allowLocalLogin}
+        />
+      ) : (
+        <LoginForm />
+      )}
     </LoginPageWrapper>
   );
 }

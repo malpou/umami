@@ -17,6 +17,8 @@ model User {
   logoUrl           String?   @map("logo_url") @db.VarChar(2183)
   displayName       String?   @map("display_name") @db.VarChar(255)
   twoFactorRequired Boolean   @default(false) @map("two_factor_required")
+  oidcIssuer        String?   @map("oidc_issuer") @db.VarChar(500)
+  oidcSubject       String?   @map("oidc_subject") @db.VarChar(255)
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -33,6 +35,7 @@ model User {
   twoFactorOtpUseds    TwoFactorOtpUsed[]
   twoFactorRateLimit   TwoFactorRateLimit?
 
+  @@unique([oidcIssuer, oidcSubject])
   @@map("user")
 }
 

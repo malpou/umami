@@ -25,3 +25,19 @@ if (!process.env.SKIP_DB_CHECK && !process.env.DATABASE_TYPE) {
 if (process.env.CLOUD_URL) {
   checkMissing(['CLOUD_URL', 'CLICKHOUSE_URL', 'REDIS_URL']);
 }
+
+if (process.env.OIDC_ISSUER) {
+  checkMissing(['OIDC_CLIENT_ID', 'APP_URL']);
+
+  if (
+    !process.env.OIDC_ROLE_ADMIN &&
+    !process.env.OIDC_ROLE_USER &&
+    !process.env.OIDC_ROLE_VIEW_ONLY
+  ) {
+    console.log(
+      'OIDC is enabled but no role mapping is defined. ' +
+        'Set at least one of OIDC_ROLE_ADMIN, OIDC_ROLE_USER, or OIDC_ROLE_VIEW_ONLY.',
+    );
+    process.exit(1);
+  }
+}
