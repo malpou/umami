@@ -15,6 +15,7 @@ import {
 const log = debug('umami:oidc');
 
 export const OIDC_STATE_COOKIE = 'umami.oidc';
+export const SSO_HANDOFF_COOKIE = 'umami.sso-handoff';
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const DISCOVERY_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -67,7 +68,7 @@ export function parseDuration(value: string | undefined, defaultSeconds: number)
   const num = Number(match[1]);
   const unit = { s: 1, m: 60, h: 3600, d: 86400 }[match[2] || 's'];
 
-  return num * unit;
+  return num > 0 ? num * unit : defaultSeconds;
 }
 
 export function getOidcConfig(): OidcConfig {
@@ -134,10 +135,6 @@ export async function getOidcClient(): Promise<client.Configuration> {
   }
 }
 
-export function clearOidcClientCache() {
-  discoveryCache = null;
-}
-
 export function sealLoginState(data: {
   state: string;
   codeVerifier: string;
@@ -174,6 +171,21 @@ export function loginStateCookie(value: string | null): string {
   return `${OIDC_STATE_COOKIE}=${encodeURIComponent(
     value,
   )}; HttpOnly; Path=${path}; SameSite=Lax; Max-Age=600${secure}`;
+}
+
+// One-time handoff nonce proving /sso-complete was reached from this
+// browser's own callback redirect, not from a link with a planted token.
+// Not HttpOnly by design: the completion page must read and compare it.
+export function ssoHandoffCookie(value: string | null): string {
+  const config = getOidcConfig();
+  const path = `${config.basePath}/sso-complete`;
+  const secure = config.appUrl.startsWith('https://') ? '; Secure' : '';
+
+  if (value === null) {
+    return `${SSO_HANDOFF_COOKIE}=; Path=${path}; SameSite=Lax; Max-Age=0${secure}`;
+  }
+
+  return `${SSO_HANDOFF_COOKIE}=${encodeURIComponent(value)}; Path=${path}; SameSite=Lax; Max-Age=60${secure}`;
 }
 
 export function getCookieValue(request: Request, name: string): string | null {
@@ -244,6 +256,10 @@ export function pickUsername(claims: Record<string, unknown>): string {
     .slice(0, 255);
 }
 
+export function hasProfileClaims(claims: Record<string, unknown>): boolean {
+  return !!(claims?.preferred_username || claims?.email);
+}
+
 function suffixUsername(username: string, subject: string): string {
   const suffix = `-${subject.slice(0, 8).toLowerCase()}`;
 
@@ -280,20 +296,38 @@ export async function findOrCreateOidcUser(
       data.displayName = displayName;
     }
 
-    const username = pickUsername(claims);
+    // Only sync the username from real profile claims — never rename an
+    // account to the bare subject id when the token carries no profile.
+    if (hasProfileClaims(claims)) {
+      const username = pickUsername(claims);
 
-    if (username && username !== existing.username) {
-      const taken = await getUserForOidcLink(username);
+      if (username && username !== existing.username) {
+        const taken = await getUserForOidcLink(username);
 
-      if (!taken) {
-        data.username = username;
-      } else {
-        log(`Username ${username} is taken; keeping ${existing.username}`);
+        if (!taken) {
+          data.username = username;
+        } else {
+          log(`Username ${username} is taken; keeping ${existing.username}`);
+        }
       }
     }
 
     if (Object.keys(data).length > 0) {
-      await updateUser(existing.id, data);
+      try {
+        await updateUser(existing.id, data);
+      } catch (e) {
+        // Username claimed by a concurrent write: keep the old name rather
+        // than failing the login.
+        if (!isUniqueConstraintError(e) || !data.username) {
+          throw e;
+        }
+
+        delete data.username;
+
+        if (Object.keys(data).length > 0) {
+          await updateUser(existing.id, data);
+        }
+      }
     }
 
     return { ...existing, ...data };
@@ -308,7 +342,13 @@ export async function findOrCreateOidcUser(
   const taken = await getUserForOidcLink(username);
 
   if (taken) {
-    if (config.autoLinkUsername && !taken.oidcIssuer) {
+    // Auto-link only on trusted identity claims: preferred_username, or an
+    // email the IdP has marked verified. Never link on the bare subject id.
+    const usernameFromEmail = !claims.preferred_username && !!claims.email;
+    const linkSafe =
+      hasProfileClaims(claims) && (!usernameFromEmail || claims.email_verified === true);
+
+    if (config.autoLinkUsername && linkSafe && !taken.oidcIssuer) {
       await updateUser(taken.id, {
         oidcIssuer: issuer,
         oidcSubject: subject,

@@ -84,10 +84,14 @@ When OIDC is enabled, local password login is disabled (both the login form and 
 | `OIDC_ALLOW_LOCAL_LOGIN` | no | off | Keep username/password login available alongside SSO (break-glass) |
 | `OIDC_PROVIDER_NAME` | no | `SSO` | Name shown on the login button |
 | `OIDC_RP_LOGOUT` | no | off | Also end the identity provider session on logout |
-| `OIDC_AUTO_LINK_USERNAME` | no | off | Link an SSO login to an existing local account with the same username |
+| `OIDC_AUTO_LINK_USERNAME` | no | off | Link an SSO login to an existing local account with the same username (only from `preferred_username`, or from `email` when `email_verified` is true) |
 | `OIDC_SESSION_DURATION` | no | `24h` | Lifetime of umami sessions created via SSO (e.g. `12h`, `30m`, `7d`) |
 
 \* At least one of the three role mappings must be set. A user with none of the mapped roles is denied access.
+
+Do not combine `DISABLE_LOGIN` with OIDC — the login page must render to show the single sign-on button.
+Users who were already logged in with a local account keep their existing sessions when OIDC is enabled;
+rotate `APP_SECRET` to force everyone through the identity provider.
 
 Zitadel setup: create a **Web** application with **PKCE** authentication, set the redirect URI to
 `<APP_URL>/api/auth/oidc/callback` and the post-logout redirect URI to `<APP_URL>/login`, create roles

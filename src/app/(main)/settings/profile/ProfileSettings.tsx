@@ -6,7 +6,7 @@ import { PasswordChangeButton } from './PasswordChangeButton';
 export function ProfileSettings() {
   const { user } = useLoginQuery();
   const { t, labels } = useMessages();
-  const { cloudMode, oidcEnabled } = useConfig();
+  const { cloudMode, localLoginDisabled } = useConfig();
 
   if (!user) {
     return null;
@@ -38,7 +38,7 @@ export function ProfileSettings() {
         <Label>{t(labels.role)}</Label>
         {renderRole(role)}
       </Column>
-      {!cloudMode && !oidcEnabled && (
+      {!cloudMode && !localLoginDisabled && (
         <Column>
           <Label>{t(labels.password)}</Label>
           <Row>

@@ -1,17 +1,19 @@
 import debug from 'debug';
 import * as client from 'openid-client';
 import { saveAuth } from '@/lib/auth';
-import { hash, secret } from '@/lib/crypto';
+import { createAuthKey, hash, secret } from '@/lib/crypto';
 import { createSecureToken } from '@/lib/jwt';
 import {
   findOrCreateOidcUser,
   getCookieValue,
   getOidcClient,
   getOidcConfig,
+  hasProfileClaims,
   loginStateCookie,
   OIDC_STATE_COOKIE,
   openLoginState,
   resolveRole,
+  ssoHandoffCookie,
 } from '@/lib/oidc';
 import redis from '@/lib/redis';
 import { notFound } from '@/lib/response';
@@ -72,7 +74,11 @@ export async function GET(request: Request) {
 
   let claims: Record<string, unknown> = { ...(tokens.claims() || {}) };
 
-  if (claims[config.rolesClaim] === undefined && tokens.access_token) {
+  // Some IdPs keep roles and/or profile claims out of the ID token and only
+  // serve them from the userinfo endpoint.
+  const needsUserinfo = claims[config.rolesClaim] === undefined || !hasProfileClaims(claims);
+
+  if (needsUserinfo && tokens.access_token) {
     try {
       const userinfo = await client.fetchUserInfo(
         configuration,
@@ -124,11 +130,15 @@ export async function GET(request: Request) {
     });
   }
 
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: `${config.basePath}/sso-complete#token=${encodeURIComponent(token)}`,
-      'Set-Cookie': loginStateCookie(null),
-    },
+  // One-time nonce binding the /sso-complete handoff to this browser, so a
+  // link with a planted token from elsewhere is rejected.
+  const handoffId = createAuthKey();
+
+  const headers = new Headers({
+    Location: `${config.basePath}/sso-complete#token=${encodeURIComponent(token)}&sid=${handoffId}`,
   });
+  headers.append('Set-Cookie', loginStateCookie(null));
+  headers.append('Set-Cookie', ssoHandoffCookie(handoffId));
+
+  return new Response(null, { status: 302, headers });
 }

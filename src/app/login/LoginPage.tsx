@@ -1,11 +1,10 @@
 'use client';
 import { Column, Loading } from '@umami/react-zen';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { type PropsWithChildren, useEffect } from 'react';
 import { useLoginQuery } from '@/components/hooks';
 import { LoginForm } from './LoginForm';
 import { SsoLoginForm } from './SsoLoginForm';
-import { PropsWithChildren } from 'react';
 
 export function LoginPageWrapper({ children }: PropsWithChildren) {
   const { user, isLoading } = useLoginQuery();

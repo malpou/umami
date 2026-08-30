@@ -9,6 +9,7 @@ import {
 import {
   findOrCreateOidcUser,
   getOidcConfig,
+  loginStateCookie,
   normalizeRoleKeys,
   type OidcConfig,
   openLoginState,
@@ -16,6 +17,7 @@ import {
   pickUsername,
   resolveRole,
   sealLoginState,
+  ssoHandoffCookie,
 } from './oidc';
 
 vi.mock('@/queries/prisma/user', () => ({
@@ -75,6 +77,8 @@ describe('parseDuration', () => {
     expect(parseDuration('3600', 1)).toBe(3600);
     expect(parseDuration(undefined, 42)).toBe(42);
     expect(parseDuration('soon', 42)).toBe(42);
+    expect(parseDuration('0', 42)).toBe(42);
+    expect(parseDuration('0h', 42)).toBe(42);
   });
 });
 
@@ -183,6 +187,28 @@ describe('login state', () => {
   });
 });
 
+describe('cookies', () => {
+  test('scopes cookies to their routes and sets Secure for https deployments', () => {
+    vi.stubEnv('APP_URL', 'https://analytics.example.com');
+    vi.stubEnv('BASE_PATH', '/umami');
+
+    expect(loginStateCookie('v')).toContain('Path=/umami/api/auth/oidc');
+    expect(loginStateCookie('v')).toContain('HttpOnly');
+    expect(loginStateCookie('v')).toContain('Secure');
+    expect(loginStateCookie(null)).toContain('Max-Age=0');
+
+    expect(ssoHandoffCookie('abc')).toContain('Path=/umami/sso-complete');
+    expect(ssoHandoffCookie('abc')).toContain('Max-Age=60');
+    expect(ssoHandoffCookie('abc')).not.toContain('HttpOnly');
+  });
+
+  test('omits Secure for http deployments', () => {
+    vi.stubEnv('APP_URL', 'http://localhost:3000');
+
+    expect(loginStateCookie('v')).not.toContain('Secure');
+  });
+});
+
 describe('findOrCreateOidcUser', () => {
   const claims = {
     sub: SUBJECT,
@@ -238,6 +264,49 @@ describe('findOrCreateOidcUser', () => {
     expect(createUserMock).not.toHaveBeenCalled();
   });
 
+  test('does not rename an existing user when the token has no profile claims', async () => {
+    getUserByOidcIdentityMock.mockResolvedValue({
+      id: 'u1',
+      username: 'bob',
+      password: 'hash',
+      role: ROLES.user,
+      displayName: 'Bob Smith',
+      oidcIssuer: ISSUER,
+      oidcSubject: SUBJECT,
+    } as any);
+
+    await findOrCreateOidcUser(ISSUER, SUBJECT, { sub: SUBJECT }, ROLES.user);
+
+    expect(updateUserMock).not.toHaveBeenCalled();
+    expect(getUserForOidcLinkMock).not.toHaveBeenCalled();
+  });
+
+  test('keeps the old username when a rename hits a unique-constraint race', async () => {
+    getUserByOidcIdentityMock.mockResolvedValue({
+      id: 'u1',
+      username: 'bob',
+      password: 'hash',
+      role: ROLES.user,
+      displayName: 'Bob Smith',
+      oidcIssuer: ISSUER,
+      oidcSubject: SUBJECT,
+    } as any);
+    getUserForOidcLinkMock.mockResolvedValue(null);
+    updateUserMock.mockRejectedValueOnce({ code: 'P2002' });
+
+    const user = await findOrCreateOidcUser(
+      ISSUER,
+      SUBJECT,
+      { ...claims, preferred_username: 'Alice' },
+      ROLES.admin,
+    );
+
+    expect(updateUserMock).toHaveBeenCalledTimes(2);
+    expect(updateUserMock).toHaveBeenLastCalledWith('u1', { role: ROLES.admin });
+    expect(user.username).toBe('bob');
+    expect(user.role).toBe(ROLES.admin);
+  });
+
   test('makes no update when nothing changed', async () => {
     getUserByOidcIdentityMock.mockResolvedValue({
       id: 'u1',
@@ -287,6 +356,45 @@ describe('findOrCreateOidcUser', () => {
       expect.objectContaining({ oidcIssuer: ISSUER, oidcSubject: SUBJECT, role: ROLES.user }),
     );
     expect(createUserMock).not.toHaveBeenCalled();
+    expect(user.id).toBe('local-1');
+  });
+
+  test('does not auto-link on an unverified email claim', async () => {
+    vi.stubEnv('OIDC_AUTO_LINK_USERNAME', '1');
+
+    getUserByOidcIdentityMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'u3',
+    } as any);
+    getUserForOidcLinkMock.mockResolvedValue({ id: 'local-1', oidcIssuer: null } as any);
+
+    await findOrCreateOidcUser(ISSUER, SUBJECT, { sub: SUBJECT, email: 'bob@x.com' }, ROLES.user);
+
+    expect(updateUserMock).not.toHaveBeenCalled();
+    expect(createUserMock).toHaveBeenCalledWith(
+      expect.objectContaining({ username: `bob@x.com-${SUBJECT.slice(0, 8)}` }),
+    );
+  });
+
+  test('auto-links on a verified email claim', async () => {
+    vi.stubEnv('OIDC_AUTO_LINK_USERNAME', '1');
+
+    getUserByOidcIdentityMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'local-1',
+      username: 'bob@x.com',
+    } as any);
+    getUserForOidcLinkMock.mockResolvedValue({ id: 'local-1', oidcIssuer: null } as any);
+
+    const user = await findOrCreateOidcUser(
+      ISSUER,
+      SUBJECT,
+      { sub: SUBJECT, email: 'bob@x.com', email_verified: true },
+      ROLES.user,
+    );
+
+    expect(updateUserMock).toHaveBeenCalledWith(
+      'local-1',
+      expect.objectContaining({ oidcIssuer: ISSUER, oidcSubject: SUBJECT }),
+    );
     expect(user.id).toBe('local-1');
   });
 
