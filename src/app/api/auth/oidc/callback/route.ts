@@ -5,6 +5,7 @@ import { createAuthKey, hash, secret } from '@/lib/crypto';
 import { createSecureToken } from '@/lib/jwt';
 import {
   findOrCreateOidcUser,
+  getClaim,
   getCookieValue,
   getOidcClient,
   getOidcConfig,
@@ -76,7 +77,8 @@ export async function GET(request: Request) {
 
   // Some IdPs keep roles and/or profile claims out of the ID token and only
   // serve them from the userinfo endpoint.
-  const needsUserinfo = claims[config.rolesClaim] === undefined || !hasProfileClaims(claims);
+  const needsUserinfo =
+    getClaim(claims, config.rolesClaim) === undefined || !hasProfileClaims(claims);
 
   if (needsUserinfo && tokens.access_token) {
     try {

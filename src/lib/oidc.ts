@@ -20,8 +20,8 @@ export const SSO_HANDOFF_COOKIE = 'umami.sso-handoff';
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const DISCOVERY_CACHE_TTL_MS = 60 * 60 * 1000;
 
-export const DEFAULT_ROLES_CLAIM = 'urn:zitadel:iam:org:project:roles';
-export const DEFAULT_SCOPES = 'openid profile email urn:zitadel:iam:org:projects:roles';
+export const DEFAULT_ROLES_CLAIM = 'roles';
+export const DEFAULT_SCOPES = 'openid profile email';
 
 export interface OidcRoleMap {
   admin: string[];
@@ -230,8 +230,24 @@ export function normalizeRoleKeys(raw: unknown): string[] {
   return [];
 }
 
+export function getClaim(claims: Record<string, unknown>, name: string): unknown {
+  if (!claims) {
+    return undefined;
+  }
+
+  // Exact claim names win, so URN- or URL-style names containing dots work.
+  if (Object.hasOwn(claims, name)) {
+    return claims[name];
+  }
+
+  // Fall back to dot-path traversal for nested claims (e.g. realm_access.roles).
+  return name
+    .split('.')
+    .reduce<unknown>((value, key) => (value as Record<string, unknown>)?.[key], claims);
+}
+
 export function resolveRole(claims: Record<string, unknown>, config: OidcConfig): Role | null {
-  const keys = normalizeRoleKeys(claims?.[config.rolesClaim]);
+  const keys = normalizeRoleKeys(getClaim(claims, config.rolesClaim));
 
   if (keys.some(key => config.roleMap.admin.includes(key))) {
     return ROLES.admin;

@@ -41,7 +41,7 @@ function makeConfig(overrides: Partial<OidcConfig> = {}): OidcConfig {
     issuer: ISSUER,
     clientId: 'umami',
     scopes: 'openid profile email',
-    rolesClaim: 'urn:zitadel:iam:org:project:roles',
+    rolesClaim: 'roles',
     roleMap: { admin: ['umami-admin'], user: ['umami-user'], viewOnly: ['umami-view'] },
     allowLocalLogin: false,
     providerName: 'SSO',
@@ -110,7 +110,7 @@ describe('getOidcConfig', () => {
 });
 
 describe('normalizeRoleKeys', () => {
-  test('handles the Zitadel object map shape', () => {
+  test('handles the object map claim shape', () => {
     expect(normalizeRoleKeys({ 'umami-admin': { org1: 'org1.example' } })).toEqual(['umami-admin']);
   });
 
@@ -141,9 +141,29 @@ describe('resolveRole', () => {
   });
 
   test('reads a custom claim name', () => {
-    const custom = makeConfig({ rolesClaim: 'roles' });
+    const custom = makeConfig({ rolesClaim: 'my-roles' });
 
-    expect(resolveRole({ roles: ['umami-admin'] }, custom)).toBe(ROLES.admin);
+    expect(resolveRole({ 'my-roles': ['umami-admin'] }, custom)).toBe(ROLES.admin);
+  });
+
+  test('reads a nested claim via dot-path', () => {
+    const custom = makeConfig({ rolesClaim: 'realm_access.roles' });
+
+    expect(resolveRole({ realm_access: { roles: ['umami-admin'] } }, custom)).toBe(ROLES.admin);
+  });
+
+  test('an exact claim name containing dots wins over path traversal', () => {
+    const custom = makeConfig({ rolesClaim: 'https://example.com/roles' });
+
+    expect(resolveRole({ 'https://example.com/roles': ['umami-user'] }, custom)).toBe(ROLES.user);
+  });
+
+  test('reads an exact URN-style claim name', () => {
+    const custom = makeConfig({ rolesClaim: 'urn:example:project:roles' });
+
+    expect(resolveRole({ 'urn:example:project:roles': { 'umami-admin': {} } }, custom)).toBe(
+      ROLES.admin,
+    );
   });
 });
 

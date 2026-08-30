@@ -62,10 +62,9 @@ postgresql://username:mypassword@localhost:5432/mydb
 
 ### OIDC / Single Sign-On (optional)
 
-Umami can authenticate users against any OpenID Connect provider (for example [Zitadel](https://zitadel.com))
-using the authorization code flow with PKCE. Users are provisioned automatically on first login, and their
-umami role is derived from role claims in the ID token on **every** login — the identity provider is the
-source of truth for access.
+Umami can authenticate users against any OpenID Connect provider using the authorization code flow with
+PKCE. Users are provisioned automatically on first login, and their umami role is derived from role claims
+in the ID token (or userinfo) on **every** login — the identity provider is the source of truth for access.
 
 When OIDC is enabled, local password login is disabled (both the login form and the API) unless
 `OIDC_ALLOW_LOCAL_LOGIN` is set.
@@ -79,8 +78,8 @@ When OIDC is enabled, local password login is disabled (both the login form and 
 | `OIDC_ROLE_ADMIN` | * | — | Comma-separated provider role keys mapped to the umami `admin` role |
 | `OIDC_ROLE_USER` | * | — | Comma-separated provider role keys mapped to the umami `user` role |
 | `OIDC_ROLE_VIEW_ONLY` | * | — | Comma-separated provider role keys mapped to the umami `view-only` role |
-| `OIDC_SCOPES` | no | `openid profile email urn:zitadel:iam:org:projects:roles` | Requested scopes |
-| `OIDC_ROLES_CLAIM` | no | `urn:zitadel:iam:org:project:roles` | Claim containing the user's roles (object map, array, or delimited string) |
+| `OIDC_SCOPES` | no | `openid profile email` | Requested scopes; add any provider-specific scope needed to receive role claims |
+| `OIDC_ROLES_CLAIM` | no | `roles` | Claim containing the user's roles (object map, array, or delimited string); exact names — including URN/URL-style names — are matched first, and dot notation reads nested claims (e.g. `realm_access.roles`) |
 | `OIDC_ALLOW_LOCAL_LOGIN` | no | off | Keep username/password login available alongside SSO (break-glass) |
 | `OIDC_PROVIDER_NAME` | no | `SSO` | Name shown on the login button |
 | `OIDC_RP_LOGOUT` | no | off | Also end the identity provider session on logout |
@@ -93,10 +92,12 @@ Do not combine `DISABLE_LOGIN` with OIDC — the login page must render to show 
 Users who were already logged in with a local account keep their existing sessions when OIDC is enabled;
 rotate `APP_SECRET` to force everyone through the identity provider.
 
-Zitadel setup: create a **Web** application with **PKCE** authentication, set the redirect URI to
-`<APP_URL>/api/auth/oidc/callback` and the post-logout redirect URI to `<APP_URL>/login`, create roles
-(e.g. `umami-admin`, `umami-user`) on the project, grant them to your users, and either enable
-**Assert Roles on Authentication** on the project or rely on the roles scope requested by default.
+Provider setup: register a web application using the authorization code flow with **PKCE** (no client
+secret needed; set `OIDC_CLIENT_SECRET` if you use a confidential client instead), set the redirect URI to
+`<APP_URL>/api/auth/oidc/callback` and the post-logout redirect URI to `<APP_URL>/login`, define roles
+(e.g. `umami-admin`, `umami-user`) and grant them to your users. Make sure the provider includes the roles
+in the ID token or userinfo response — the claim name and any extra scope this requires vary by provider,
+so set `OIDC_ROLES_CLAIM` and `OIDC_SCOPES` accordingly.
 
 ### Build the Application
 
