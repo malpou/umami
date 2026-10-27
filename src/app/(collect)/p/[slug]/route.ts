@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { POST } from '@/app/api/send/route';
 import type { Pixel } from '@/generated/prisma/client';
-import redis from '@/lib/redis';
+import kv from '@/lib/kv';
 import { notFound } from '@/lib/response';
 import { findPixel } from '@/queries/prisma';
 
@@ -12,36 +12,21 @@ const image = Buffer.from('R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICR
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  let pixel: Pixel;
+  const pixel: Pixel = await kv.cache.fetch(
+    `pixel:${slug}`,
+    async () => {
+      return findPixel({
+        where: {
+          slug,
+          deletedAt: null,
+        },
+      });
+    },
+    86400,
+  );
 
-  if (redis.enabled) {
-    pixel = await redis.client.fetch(
-      `pixel:${slug}`,
-      async () => {
-        return findPixel({
-          where: {
-            slug,
-            deletedAt: null,
-          },
-        });
-      },
-      86400,
-    );
-
-    if (!pixel) {
-      return notFound();
-    }
-  } else {
-    pixel = await findPixel({
-      where: {
-        slug,
-        deletedAt: null,
-      },
-    });
-
-    if (!pixel) {
-      return notFound();
-    }
+  if (!pixel) {
+    return notFound();
   }
 
   const payload = {

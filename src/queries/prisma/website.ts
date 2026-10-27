@@ -1,7 +1,7 @@
 import type { Prisma, Website } from '@/generated/prisma/client';
 import { ROLES } from '@/lib/constants';
+import kv from '@/lib/kv';
 import prisma, { getSchema } from '@/lib/prisma';
-import redis from '@/lib/redis';
 import { sanitizeSortFilters } from '@/lib/sort';
 import type { QueryFilters } from '@/lib/types';
 import { z } from 'zod';
@@ -184,12 +184,16 @@ export async function updateWebsite(
   websiteId: string,
   data: Prisma.WebsiteUpdateInput | Prisma.WebsiteUncheckedUpdateInput,
 ) {
-  return prisma.client.website.update({
+  const website = await prisma.client.website.update({
     where: {
       id: websiteId,
     },
     data,
   });
+
+  await kv.cache.del(`website:${websiteId}`);
+
+  return website;
 }
 
 export async function resetWebsite(websiteId: string) {
@@ -214,7 +218,9 @@ export async function resetWebsite(websiteId: string) {
     },
   ).then(async data => {
     if (cloudMode) {
-      await redis.client.set(`website:${websiteId}`, data);
+      await kv.cache.set(`website:${websiteId}`, data);
+    } else {
+      await kv.cache.del(`website:${websiteId}`);
     }
 
     return data;
@@ -258,9 +264,7 @@ export async function deleteWebsite(websiteId: string) {
       timeout: 30000,
     },
   ).then(async data => {
-    if (cloudMode) {
-      await redis.client.del(`website:${websiteId}`);
-    }
+    await kv.cache.del(`website:${websiteId}`);
 
     return data;
   });

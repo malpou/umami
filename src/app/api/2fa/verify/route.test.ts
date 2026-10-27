@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   getBearerToken: vi.fn(),
   saveAuth: vi.fn(),
   parseSecureToken: vi.fn(),
-  createSecureToken: vi.fn(),
   getUser: vi.fn(),
   getAllUserTeams: vi.fn(),
   findTwoFactorAuth: vi.fn(),
@@ -32,7 +31,6 @@ vi.mock('@/lib/crypto', () => ({
 }));
 
 vi.mock('@/lib/jwt', () => ({
-  createSecureToken: mocks.createSecureToken,
   parseSecureToken: mocks.parseSecureToken,
 }));
 
@@ -83,19 +81,12 @@ vi.mock('@/lib/two-factor/totp', () => ({
   verifyTotp: mocks.verifyTotp,
 }));
 
-vi.mock('@/lib/redis', () => ({
-  default: {
-    enabled: false,
-  },
-}));
-
 import { POST } from './route';
 
 beforeEach(() => {
   mocks.getBearerToken.mockReset();
   mocks.saveAuth.mockReset();
   mocks.parseSecureToken.mockReset();
-  mocks.createSecureToken.mockReset();
   mocks.getUser.mockReset();
   mocks.getAllUserTeams.mockReset();
   mocks.findTwoFactorAuth.mockReset();
@@ -123,7 +114,7 @@ beforeEach(() => {
   });
   mocks.getAllUserTeams.mockResolvedValue([]);
   mocks.findTwoFactorAuth.mockResolvedValue({ userId: 'user-1', isEnabled: true, secret: 'encrypted' });
-  mocks.createSecureToken.mockReturnValue('full-auth-token');
+  mocks.saveAuth.mockResolvedValue('full-auth-token');
   mocks.decryptSecret.mockReturnValue('plain-secret');
   mocks.isTwoFactorConfigured.mockReturnValue(true);
   mocks.checkRateLimit.mockResolvedValue({ allowed: true });
@@ -152,6 +143,7 @@ test('POST accepts a token-only payload and completes 2FA verification', async (
   expect(mocks.verifyTotp).toHaveBeenCalledWith('123456', 'plain-secret');
   expect(mocks.markOtpUsed).toHaveBeenCalledWith('user-1', '123456');
   expect(mocks.resetRateLimit).toHaveBeenCalledWith('user-1');
+  expect(mocks.saveAuth).toHaveBeenCalledWith({ userId: 'user-1', role: 'admin' });
   await expect(response.json()).resolves.toMatchObject({
     token: 'full-auth-token',
     user: {

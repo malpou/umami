@@ -37,8 +37,10 @@ async function checkEnv() {
     success('DATABASE_URL is defined.');
   }
 
-  if (process.env.REDIS_URL) {
-    success('REDIS_URL is defined.');
+  if (!process.env.NATS_URL) {
+    throw new Error('NATS_URL is not defined. Login sessions are stored in NATS KV.');
+  } else {
+    success('NATS_URL is defined.');
   }
 }
 

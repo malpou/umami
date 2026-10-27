@@ -44,6 +44,7 @@ Create an `.env` file with the following:
 
 ```bash
 DATABASE_URL=connection-url
+NATS_URL=nats://localhost:4222
 ```
 
 Optional: set `API_URL` to change the base URL used by internal UI API calls.
@@ -59,6 +60,27 @@ The connection URL format:
 ```bash
 postgresql://username:mypassword@localhost:5432/mydb
 ```
+
+### Sessions and cache (NATS KV)
+
+This fork keeps login sessions and its read-through cache in NATS JetStream KV, so every login
+can be revoked (logout deletes it). Umami refuses to start if NATS is not configured or a
+bucket cannot be read. It binds to existing buckets and never creates them.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `NATS_URL` | yes | — | NATS server URL(s), comma-separated |
+| `NATS_CREDS` | no | — | Path to a `.creds` file (JWT + nkey) |
+| `NATS_USER` / `NATS_PASSWORD` | no | — | User/password auth, used when `NATS_CREDS` is not set |
+| `NATS_KV_AUTH_BUCKET` | no | `umami_auth` | Bucket for login sessions |
+| `NATS_KV_CACHE_BUCKET` | no | `umami_cache` | Bucket for cached websites, links and pixels |
+
+Session lifetimes: password and two-factor logins last 1 hour, SSO logins last `OIDC_SESSION_DURATION`,
+and share-to-SSO tokens last 24 hours. The expiry is stored with each entry and checked on read. If the
+auth bucket allows per-message TTLs (`--marker-ttl`), the server also removes sessions when they expire.
+Give both buckets a max age (`--ttl`) at least as long as the longest session (24 hours unless `OIDC_SESSION_DURATION` is longer). The NATS user needs publish rights on
+`$KV.<bucket>.>` and access to the `$JS.API.STREAM.INFO`, `$JS.API.DIRECT.GET` and `$JS.API.STREAM.MSG.GET`
+APIs for `KV_<bucket>`.
 
 ### OIDC / Single Sign-On (optional)
 
