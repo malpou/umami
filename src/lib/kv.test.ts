@@ -84,6 +84,8 @@ const ENV = [
   'NATS_CREDS',
   'NATS_USER',
   'NATS_PASSWORD',
+  'NATS_TOKEN_FILE',
+  'SERVICE_IDENTITY',
   'NATS_KV_AUTH_BUCKET',
   'NATS_KV_CACHE_BUCKET',
 ];
@@ -286,5 +288,28 @@ describe('checkKv', () => {
     await checkKv();
 
     expect(Buffer.from(mocks.credsAuthenticator.mock.calls[0][0]).toString()).toBe('creds-content');
+  });
+
+  test('re-reads NATS_TOKEN_FILE on every connect, as user SERVICE_IDENTITY', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const file = join(mkdtempSync(join(tmpdir(), 'kv-test-')), 'token');
+    writeFileSync(file, 'first-token\n');
+    process.env.NATS_TOKEN_FILE = file;
+    process.env.SERVICE_IDENTITY = 'umami/umami';
+    const { checkKv } = await loadKv();
+
+    await checkKv();
+
+    const [user, pass] = mocks.usernamePasswordAuthenticator.mock.lastCall as unknown as [
+      string,
+      () => string,
+    ];
+    expect(user).toBe('umami/umami');
+    expect(pass()).toBe('first-token');
+    // The kubelet rotates the projected token in place; a reconnect must see the new one.
+    writeFileSync(file, 'rotated-token\n');
+    expect(pass()).toBe('rotated-token');
   });
 });
