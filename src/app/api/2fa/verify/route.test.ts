@@ -85,12 +85,6 @@ vi.mock('@/lib/two-factor/totp', () => ({
   verifyTotp: mocks.verifyTotp,
 }));
 
-vi.mock('@/lib/redis', () => ({
-  default: {
-    enabled: false,
-  },
-}));
-
 import { POST } from './route';
 
 beforeEach(() => {
@@ -132,7 +126,7 @@ beforeEach(() => {
     isEnabled: true,
     secret: 'encrypted',
   });
-  mocks.createSecureToken.mockReturnValue('full-auth-token');
+  mocks.saveAuth.mockResolvedValue('full-auth-token');
   mocks.decryptSecret.mockReturnValue('plain-secret');
   mocks.isTwoFactorConfigured.mockReturnValue(true);
   mocks.checkRateLimit.mockResolvedValue({ allowed: true });
@@ -163,10 +157,13 @@ test('POST accepts a token-only payload and completes 2FA verification', async (
   expect(mocks.resetRateLimit).toHaveBeenCalledWith('user-1');
   // Full session must not carry the partial-auth type and must be bound to the password.
   expect(mocks.hash).toHaveBeenCalledWith('$2b$10$hashedpassword');
-  expect(mocks.createSecureToken).toHaveBeenCalledWith(
-    { userId: 'user-1', role: 'admin', pwd: 'pwd-fingerprint' },
-    'app-secret',
-  );
+  // Sessions are always server-side: the full token is a KV-backed session.
+  expect(mocks.saveAuth).toHaveBeenCalledWith({
+    userId: 'user-1',
+    role: 'admin',
+    pwd: 'pwd-fingerprint',
+  });
+  expect(mocks.createSecureToken).not.toHaveBeenCalled();
   const data = await response.json();
   expect(data).toMatchObject({
     token: 'full-auth-token',

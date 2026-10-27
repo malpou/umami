@@ -2,9 +2,8 @@ import { z } from 'zod';
 import { getBearerToken, saveAuth } from '@/lib/auth';
 import { PARTIAL_AUTH_TOKEN_TYPE, ROLES } from '@/lib/constants';
 import { hash, secret } from '@/lib/crypto';
-import { createSecureToken, parseSecureToken } from '@/lib/jwt';
+import { parseSecureToken } from '@/lib/jwt';
 import prisma from '@/lib/prisma';
-import redis from '@/lib/redis';
 import { parseRequest } from '@/lib/request';
 import { badRequest, json, notFound, serviceUnavailable, unauthorized } from '@/lib/response';
 import { verifyBackupCode } from '@/lib/two-factor/backup-codes';
@@ -134,12 +133,7 @@ export async function POST(request: Request) {
   // Bind token to password hash so a password change invalidates old tokens.
   const pwd = hash(user.password);
 
-  let fullToken: string;
-  if (redis.enabled) {
-    fullToken = await saveAuth({ userId: id, role, pwd });
-  } else {
-    fullToken = createSecureToken({ userId: id, role, pwd }, secret());
-  }
+  const fullToken = await saveAuth({ userId: id, role, pwd });
 
   const teams = await getAllUserTeams(id);
 

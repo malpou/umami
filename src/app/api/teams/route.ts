@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { uuid } from '@/lib/crypto';
 import { getRandomChars } from '@/lib/generate';
+import kv from '@/lib/kv';
 import { fetchAccount } from '@/lib/load';
-import redis from '@/lib/redis';
 import { getQueryFilters, parseRequest } from '@/lib/request';
 import { json, unauthorized } from '@/lib/response';
 import { pagingParams, sortingParams } from '@/lib/schema';
@@ -75,8 +75,8 @@ export async function POST(request: Request) {
     teamOwnerId,
   );
 
-  if (process.env.CLOUD_MODE && redis.enabled && account) {
-    await redis.client.set(
+  if (process.env.CLOUD_MODE && account) {
+    await kv.cache.set(
       `team:${teamId}`,
       {
         teamOwnerId,

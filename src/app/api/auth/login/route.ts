@@ -4,7 +4,6 @@ import { hash, secret } from '@/lib/crypto';
 import { createSecureToken } from '@/lib/jwt';
 import { checkPassword } from '@/lib/password';
 import prisma from '@/lib/prisma';
-import redis from '@/lib/redis';
 import { parseRequest } from '@/lib/request';
 import { getOidcConfig } from '@/lib/oidc';
 import { forbidden, json, serviceUnavailable, unauthorized } from '@/lib/response';
@@ -58,13 +57,7 @@ export async function POST(request: Request) {
   // Bind token to password hash so a password change invalidates old tokens.
   const pwd = hash(user.password);
 
-  let token: string;
-
-  if (redis.enabled) {
-    token = await saveAuth({ userId: id, role, pwd });
-  } else {
-    token = createSecureToken({ userId: user.id, role, pwd }, secret());
-  }
+  const token = await saveAuth({ userId: id, role, pwd });
 
   const teams = await getAllUserTeams(id);
 

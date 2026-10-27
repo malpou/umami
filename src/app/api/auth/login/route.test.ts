@@ -49,12 +49,6 @@ vi.mock('@/lib/auth', () => ({
   saveAuth: mocks.saveAuth,
 }));
 
-vi.mock('@/lib/redis', () => ({
-  default: {
-    enabled: false,
-  },
-}));
-
 vi.mock('@/lib/two-factor/crypto', () => ({
   getTwoFactorConfigurationError: () => ({
     code: 'two-factor-error-not-configured',
@@ -105,4 +99,21 @@ test('POST returns a configuration error instead of partial auth when 2FA is ena
     },
   });
   expect(response.status).toBe(503);
+});
+
+test('POST stores the session in KV instead of minting a stateless token', async () => {
+  mocks.findTwoFactorAuth.mockResolvedValue(null);
+  mocks.hash.mockReturnValue('password-fingerprint');
+  mocks.saveAuth.mockResolvedValue('session-token');
+  mocks.getAllUserTeams.mockResolvedValue([]);
+
+  const response = await POST(new Request('http://localhost/api/auth/login', { method: 'POST' }));
+
+  expect(mocks.saveAuth).toHaveBeenCalledWith({
+    userId: 'user-1',
+    role: 'admin',
+    pwd: 'password-fingerprint',
+  });
+  expect(mocks.createSecureToken).not.toHaveBeenCalled();
+  await expect(response.json()).resolves.toMatchObject({ token: 'session-token' });
 });

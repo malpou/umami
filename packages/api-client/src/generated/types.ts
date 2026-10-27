@@ -281,7 +281,7 @@ export interface paths {
     put?: never;
     /**
      * Log out
-     * @description Ends the current authentication session by removing its stored token when Redis-backed sessions are enabled.
+     * @description Ends the current authentication session by removing its server-side session from the key-value store.
      */
     post: operations['logout'];
     delete?: never;
@@ -361,7 +361,7 @@ export interface paths {
     put?: never;
     /**
      * Create a single sign-on token
-     * @description Returns the authenticated user and a new token valid for 24 hours. Requires Redis-backed authentication.
+     * @description Returns the authenticated user and a new server-side session token valid for 24 hours.
      */
     post: operations['sso'];
     delete?: never;

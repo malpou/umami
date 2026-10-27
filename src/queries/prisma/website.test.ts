@@ -1,24 +1,30 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { deleteWebsite, resetWebsite } from './website';
+import { deleteWebsite, resetWebsite, updateWebsite } from './website';
 
-const { transactionMock, redisDelMock, redisSetMock } = vi.hoisted(() => ({
+const { transactionMock, websiteUpdateMock, cacheDelMock, cacheSetMock } = vi.hoisted(() => ({
   transactionMock: vi.fn(),
-  redisDelMock: vi.fn(),
-  redisSetMock: vi.fn(),
+  websiteUpdateMock: vi.fn(),
+  cacheDelMock: vi.fn(),
+  cacheSetMock: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
     transaction: transactionMock,
+    client: {
+      website: {
+        update: websiteUpdateMock,
+      },
+    },
   },
   getSchema: () => new URL(process.env.DATABASE_URL || '').searchParams.get('schema'),
 }));
 
-vi.mock('@/lib/redis', () => ({
+vi.mock('@/lib/kv', () => ({
   default: {
-    client: {
-      del: redisDelMock,
-      set: redisSetMock,
+    cache: {
+      del: cacheDelMock,
+      set: cacheSetMock,
     },
   },
 }));
@@ -109,8 +115,8 @@ function createDeleteTx(calls: string[]) {
 describe('website delete dependencies', () => {
   beforeEach(() => {
     transactionMock.mockReset();
-    redisDelMock.mockReset();
-    redisSetMock.mockReset();
+    cacheDelMock.mockReset();
+    cacheSetMock.mockReset();
     delete process.env.CLOUD_MODE;
     process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/umami?schema=public';
   });
@@ -158,6 +164,7 @@ describe('website delete dependencies', () => {
       'share',
       'websiteDelete',
     ]);
+    expect(cacheDelMock).toHaveBeenCalledWith('website:website-1');
   });
 
   test('resetWebsite uses the same two-pass event-data cleanup before resetting the website', async () => {
@@ -194,5 +201,23 @@ describe('website delete dependencies', () => {
       'session',
       'websiteUpdate',
     ]);
+    expect(cacheDelMock).toHaveBeenCalledWith('website:website-1');
+    expect(cacheSetMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('website cache', () => {
+  beforeEach(() => {
+    websiteUpdateMock.mockReset();
+    cacheDelMock.mockReset();
+  });
+
+  test('updateWebsite drops the cached website so collectors see the change', async () => {
+    websiteUpdateMock.mockResolvedValue({ id: 'website-1', name: 'Renamed' });
+
+    const website = await updateWebsite('website-1', { name: 'Renamed' });
+
+    expect(website).toEqual({ id: 'website-1', name: 'Renamed' });
+    expect(cacheDelMock).toHaveBeenCalledWith('website:website-1');
   });
 });

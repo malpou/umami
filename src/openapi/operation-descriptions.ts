@@ -85,12 +85,12 @@ export const operationDescriptions: Record<string, OperationDescription> = {
   'POST /api/auth/logout': {
     summary: 'Log out',
     description:
-      'Ends the current authentication session by removing its stored token when Redis-backed sessions are enabled.',
+      'Ends the current authentication session by removing its server-side session from the key-value store.',
   },
   'POST /api/auth/sso': {
     summary: 'Create a single sign-on token',
     description:
-      'Returns the authenticated user and a new token valid for 24 hours. Requires Redis-backed authentication.',
+      'Returns the authenticated user and a new server-side session token valid for 24 hours.',
   },
   'GET /api/auth/subscription': {
     summary: 'Get subscription details',

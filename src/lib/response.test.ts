@@ -19,11 +19,11 @@ describe('serverError', () => {
   });
 
   test('allows intentional server error messages', async () => {
-    const response = serverError('Redis is disabled');
+    const response = serverError('Something went wrong');
 
     expect(await response.json()).toEqual({
       error: {
-        message: 'Redis is disabled',
+        message: 'Something went wrong',
         code: 'server-error',
         status: 500,
       },
