@@ -71,7 +71,8 @@ bucket cannot be read. It binds to existing buckets and never creates them.
 |---|---|---|---|
 | `NATS_URL` | yes | — | NATS server URL(s), comma-separated |
 | `NATS_CREDS` | no | — | Path to a `.creds` file (JWT + nkey) |
-| `NATS_USER` / `NATS_PASSWORD` | no | — | User/password auth, used when `NATS_CREDS` is not set |
+| `NATS_TOKEN_FILE` | no | — | Path to a token file sent as the password, re-read on every connect (a rotating Kubernetes ServiceAccount token for an auth callout); the user is `NATS_USER`, else `SERVICE_IDENTITY`. Used when `NATS_CREDS` is not set |
+| `NATS_USER` / `NATS_PASSWORD` | no | — | User/password auth, used when neither `NATS_CREDS` nor `NATS_TOKEN_FILE` is set |
 | `NATS_KV_AUTH_BUCKET` | no | `umami_auth` | Bucket for login sessions |
 | `NATS_KV_CACHE_BUCKET` | no | `umami_cache` | Bucket for cached websites, links and pixels |
 
