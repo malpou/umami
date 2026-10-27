@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { hash } from '@/lib/crypto';
 import { parseSecureToken } from '@/lib/jwt';
-import redis from '@/lib/redis';
+import kv from '@/lib/kv';
 import { getUser } from '@/queries/prisma/user';
 import { checkAuth } from './auth';
 
@@ -14,10 +14,9 @@ vi.mock('@/queries/prisma/user', () => ({
   getUser: vi.fn(),
 }));
 
-vi.mock('@/lib/redis', () => ({
+vi.mock('@/lib/kv', () => ({
   default: {
-    enabled: false,
-    client: {
+    auth: {
       get: vi.fn(),
     },
   },
@@ -25,9 +24,8 @@ vi.mock('@/lib/redis', () => ({
 
 const parseSecureTokenMock = vi.mocked(parseSecureToken);
 const getUserMock = vi.mocked(getUser);
-const redisMock = redis as unknown as {
-  enabled: boolean;
-  client: {
+const kvMock = kv as unknown as {
+  auth: {
     get: ReturnType<typeof vi.fn>;
   };
 };
@@ -52,35 +50,64 @@ function mockUser() {
 beforeEach(() => {
   parseSecureTokenMock.mockReset();
   getUserMock.mockReset();
-  redisMock.enabled = false;
-  redisMock.client.get.mockReset();
+  kvMock.auth.get.mockReset();
 });
 
-describe('checkAuth password fingerprint', () => {
-  test('authorizes a stateless token whose fingerprint matches the current password', async () => {
+describe('checkAuth sessions', () => {
+  test('authorizes a KV session whose fingerprint matches the current password', async () => {
+    parseSecureTokenMock.mockReturnValue({ authKey: 'auth:session-key' } as any);
+    kvMock.auth.get.mockResolvedValue({ userId: 'user-1', pwd: hash(PASSWORD_HASH) });
+    mockUser();
+
+    const result = await checkAuth(authedRequest());
+
+    expect(kvMock.auth.get).toHaveBeenCalledWith('auth:session-key');
+    expect(result?.user?.id).toBe('user-1');
+  });
+
+  test('authorizes a KV session that does not include a password fingerprint', async () => {
+    parseSecureTokenMock.mockReturnValue({ authKey: 'auth:session-key' } as any);
+    kvMock.auth.get.mockResolvedValue({ userId: 'user-1' });
+    mockUser();
+
+    const result = await checkAuth(authedRequest());
+
+    expect(result?.user?.id).toBe('user-1');
+  });
+
+  test('rejects a KV session whose fingerprint predates a password change', async () => {
+    parseSecureTokenMock.mockReturnValue({ authKey: 'auth:session-key' } as any);
+    kvMock.auth.get.mockResolvedValue({ userId: 'user-1', pwd: hash('old-password-hash') });
+    mockUser();
+
+    const result = await checkAuth(authedRequest());
+
+    expect(result).toBeNull();
+  });
+
+  test('rejects a session that is no longer in KV (logged out or expired)', async () => {
+    parseSecureTokenMock.mockReturnValue({ authKey: 'auth:session-key' } as any);
+    kvMock.auth.get.mockResolvedValue(null);
+    mockUser();
+
+    const result = await checkAuth(authedRequest());
+
+    expect(result).toBeNull();
+    expect(getUserMock).not.toHaveBeenCalled();
+  });
+
+  test('rejects a stateless token, which could not be revoked', async () => {
     parseSecureTokenMock.mockReturnValue({ userId: 'user-1', pwd: hash(PASSWORD_HASH) } as any);
     mockUser();
 
     const result = await checkAuth(authedRequest());
 
-    expect(result?.user?.id).toBe('user-1');
+    expect(result).toBeNull();
+    expect(kvMock.auth.get).not.toHaveBeenCalled();
   });
 
-  test('authorizes a legacy stateless token that does not include a password fingerprint', async () => {
-    parseSecureTokenMock.mockReturnValue({ userId: 'user-1' } as any);
-    mockUser();
-
-    const result = await checkAuth(authedRequest());
-
-    expect(result?.user?.id).toBe('user-1');
-  });
-
-  test('rejects a stateless token whose fingerprint predates a password change', async () => {
-    // Token minted against the old password must stop working once the password changes.
-    parseSecureTokenMock.mockReturnValue({
-      userId: 'user-1',
-      pwd: hash('old-password-hash'),
-    } as any);
+  test('rejects a partial 2FA token as a full login', async () => {
+    parseSecureTokenMock.mockReturnValue({ userId: 'user-1', type: 'partial-auth' } as any);
     mockUser();
 
     const result = await checkAuth(authedRequest());
@@ -89,33 +116,12 @@ describe('checkAuth password fingerprint', () => {
   });
 
   test('does not expose the password hash on the returned user', async () => {
-    parseSecureTokenMock.mockReturnValue({ userId: 'user-1', pwd: hash(PASSWORD_HASH) } as any);
+    parseSecureTokenMock.mockReturnValue({ authKey: 'auth:session-key' } as any);
+    kvMock.auth.get.mockResolvedValue({ userId: 'user-1', pwd: hash(PASSWORD_HASH) });
     mockUser();
 
     const result = await checkAuth(authedRequest());
 
     expect(result?.user).not.toHaveProperty('password');
-  });
-
-  test('authorizes a Redis session whose fingerprint matches the current password', async () => {
-    redisMock.enabled = true;
-    parseSecureTokenMock.mockReturnValue({ authKey: 'auth:session-key' } as any);
-    redisMock.client.get.mockResolvedValue({ userId: 'user-1', pwd: hash(PASSWORD_HASH) });
-    mockUser();
-
-    const result = await checkAuth(authedRequest());
-
-    expect(result?.user?.id).toBe('user-1');
-  });
-
-  test('rejects a Redis session whose fingerprint predates a password change', async () => {
-    redisMock.enabled = true;
-    parseSecureTokenMock.mockReturnValue({ authKey: 'auth:session-key' } as any);
-    redisMock.client.get.mockResolvedValue({ userId: 'user-1', pwd: hash('old-password-hash') });
-    mockUser();
-
-    const result = await checkAuth(authedRequest());
-
-    expect(result).toBeNull();
   });
 });

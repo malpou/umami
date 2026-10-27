@@ -1,8 +1,8 @@
 import { Prisma } from '@/generated/prisma/client';
 import { ROLES } from '@/lib/constants';
 import { getRandomChars } from '@/lib/generate';
+import kv from '@/lib/kv';
 import prisma from '@/lib/prisma';
-import redis from '@/lib/redis';
 import { sanitizeSortFilters } from '@/lib/sort';
 import type { QueryFilters, Role } from '@/lib/types';
 
@@ -181,15 +181,15 @@ export async function deleteUser(userId: string) {
     client.board.findMany({ where: ownedFilter, select: { id: true } }),
   ]);
   const entityIds = [...links.map(l => l.id), ...pixels.map(p => p.id), ...boards.map(b => b.id)];
-  // Only invalidate Redis cache for slugs that are still live (not already soft-deleted).
+  // Only invalidate the KV cache for slugs that are still live (not already soft-deleted).
   const linkSlugs = links.filter(l => !l.deletedAt).map(l => l.slug);
   const pixelSlugs = pixels.filter(p => !p.deletedAt).map(p => p.slug);
 
-  const invalidateRedis = async () => {
-    if (redis.enabled && (linkSlugs.length || pixelSlugs.length)) {
+  const invalidateCache = async () => {
+    if (linkSlugs.length || pixelSlugs.length) {
       await Promise.all([
-        ...linkSlugs.map(slug => redis.client.del(`link:${slug}`)),
-        ...pixelSlugs.map(slug => redis.client.del(`pixel:${slug}`)),
+        ...linkSlugs.map(slug => kv.cache.del(`link:${slug}`)),
+        ...pixelSlugs.map(slug => kv.cache.del(`pixel:${slug}`)),
       ]);
     }
   };
@@ -223,7 +223,7 @@ export async function deleteUser(userId: string) {
       }),
       client.board.deleteMany({ where: { userId } }),
     ]).then(async result => {
-      await invalidateRedis();
+      await invalidateCache();
       return result;
     });
   }
@@ -289,7 +289,7 @@ export async function deleteUser(userId: string) {
       },
     }),
   ]).then(async result => {
-    await invalidateRedis();
+    await invalidateCache();
     return result;
   });
 }

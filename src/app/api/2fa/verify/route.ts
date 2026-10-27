@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 import { getBearerToken, saveAuth } from '@/lib/auth';
 import { ROLES } from '@/lib/constants';
 import { secret } from '@/lib/crypto';
-import { createSecureToken, parseSecureToken } from '@/lib/jwt';
+import { parseSecureToken } from '@/lib/jwt';
 import { parseRequest } from '@/lib/request';
 import { badRequest, json, notFound, serviceUnavailable, unauthorized } from '@/lib/response';
 import { verifyBackupCode } from '@/lib/two-factor/backup-codes';
@@ -12,7 +12,6 @@ import { checkRateLimit, recordFailedAttempt, resetRateLimit } from '@/lib/two-f
 import { isOtpReplayed, markOtpUsed } from '@/lib/two-factor/replay-prevention';
 import { verifyTotp } from '@/lib/two-factor/totp';
 import { getAllUserTeams, getUser } from '@/queries/prisma';
-import redis from '@/lib/redis';
 
 export async function POST(request: Request) {
   if (process.env.CLOUD_MODE) {
@@ -128,12 +127,7 @@ export async function POST(request: Request) {
 
   const { id, role, createdAt, username } = user;
 
-  let fullToken: string;
-  if (redis.enabled) {
-    fullToken = await saveAuth({ userId: id, role });
-  } else {
-    fullToken = createSecureToken({ userId: id, role }, secret());
-  }
+  const fullToken = await saveAuth({ userId: id, role });
 
   const teams = await getAllUserTeams(id);
 

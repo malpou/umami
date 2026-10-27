@@ -1,12 +1,11 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import redis from '@/lib/redis';
+import kv from '@/lib/kv';
 import { parseRequest } from '@/lib/request';
 import { POST } from './route';
 
-vi.mock('@/lib/redis', () => ({
+vi.mock('@/lib/kv', () => ({
   default: {
-    enabled: true,
-    client: {
+    auth: {
       del: vi.fn(),
     },
   },
@@ -20,21 +19,19 @@ vi.mock('@/lib/response', () => ({
   ok: () => new Response(null, { status: 200 }),
 }));
 
-const redisMock = redis as unknown as {
-  enabled: boolean;
-  client: {
+const kvMock = kv as unknown as {
+  auth: {
     del: ReturnType<typeof vi.fn>;
   };
 };
 const parseRequestMock = vi.mocked(parseRequest);
 
 beforeEach(() => {
-  redisMock.enabled = true;
-  redisMock.client.del.mockReset();
+  kvMock.auth.del.mockReset();
   parseRequestMock.mockReset();
 });
 
-test('POST deletes the authenticated Redis auth key', async () => {
+test('POST deletes the authenticated KV auth key', async () => {
   parseRequestMock.mockResolvedValue({
     auth: { authKey: 'auth:session-key' },
     error: undefined,
@@ -49,9 +46,9 @@ test('POST deletes the authenticated Redis auth key', async () => {
     }),
   );
 
-  expect(redisMock.client.del).toHaveBeenCalledTimes(1);
-  expect(redisMock.client.del).toHaveBeenCalledWith('auth:session-key');
-  expect(redisMock.client.del).not.toHaveBeenCalledWith('secure-token');
+  expect(kvMock.auth.del).toHaveBeenCalledTimes(1);
+  expect(kvMock.auth.del).toHaveBeenCalledWith('auth:session-key');
+  expect(kvMock.auth.del).not.toHaveBeenCalledWith('secure-token');
   expect(response.status).toBe(200);
 });
 
@@ -63,6 +60,6 @@ test('POST does not delete a key when auth fails', async () => {
 
   const response = await POST(new Request('http://localhost/api/auth/logout', { method: 'POST' }));
 
-  expect(redisMock.client.del).not.toHaveBeenCalled();
+  expect(kvMock.auth.del).not.toHaveBeenCalled();
   expect(response.status).toBe(401);
 });
