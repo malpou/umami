@@ -2,8 +2,8 @@ import { getBoardEntityIds } from '@/lib/boards';
 import { ENTITY_TYPE, ROLES, SHARE_TOKEN_TYPE } from '@/lib/constants';
 import { secret } from '@/lib/crypto';
 import { createToken } from '@/lib/jwt';
+import kv from '@/lib/kv';
 import prisma from '@/lib/prisma';
-import redis from '@/lib/redis';
 import { json, notFound } from '@/lib/response';
 import type { Auth, BoardParameters, WhiteLabel } from '@/lib/types';
 import { canViewLink, canViewPixel, canViewWebsite } from '@/permissions';
@@ -35,11 +35,7 @@ async function getAccountId(entity: { userId?: string; teamId?: string }): Promi
 }
 
 async function getWhiteLabel(accountId: string): Promise<WhiteLabel | null> {
-  if (!redis.enabled) {
-    return null;
-  }
-
-  const data = await redis.client.get(`white-label:${accountId}`);
+  const data = await kv.cache.get(`white-label:${accountId}`);
 
   if (data) {
     return data as WhiteLabel;

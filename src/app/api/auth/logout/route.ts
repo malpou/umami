@@ -1,4 +1,4 @@
-import redis from '@/lib/redis';
+import kv from '@/lib/kv';
 import { parseRequest } from '@/lib/request';
 import { ok } from '@/lib/response';
 
@@ -9,8 +9,8 @@ export async function POST(request: Request) {
     return error();
   }
 
-  if (redis.enabled && auth?.authKey) {
-    await redis.client.del(auth.authKey);
+  if (auth?.authKey) {
+    await kv.auth.del(auth.authKey);
   }
 
   return ok();

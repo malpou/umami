@@ -1,8 +1,7 @@
 import debug from 'debug';
 import * as client from 'openid-client';
 import { saveAuth } from '@/lib/auth';
-import { createAuthKey, hash, secret } from '@/lib/crypto';
-import { createSecureToken } from '@/lib/jwt';
+import { createAuthKey, hash } from '@/lib/crypto';
 import {
   findOrCreateOidcUser,
   getClaim,
@@ -16,7 +15,6 @@ import {
   resolveRole,
   ssoHandoffCookie,
 } from '@/lib/oidc';
-import redis from '@/lib/redis';
 import { notFound } from '@/lib/response';
 
 const log = debug('umami:oidc');
@@ -122,15 +120,7 @@ export async function GET(request: Request) {
   // Bind token to password hash so a password change invalidates old tokens.
   const pwd = hash(user.password);
 
-  let token: string;
-
-  if (redis.enabled) {
-    token = await saveAuth({ userId: user.id, role, pwd }, config.sessionDurationSeconds);
-  } else {
-    token = createSecureToken({ userId: user.id, role, pwd }, secret(), {
-      expiresIn: config.sessionDurationSeconds,
-    });
-  }
+  const token = await saveAuth({ userId: user.id, role, pwd }, config.sessionDurationSeconds);
 
   // One-time nonce binding the /sso-complete handoff to this browser, so a
   // link with a planted token from elsewhere is rejected.

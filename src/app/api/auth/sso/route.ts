@@ -1,8 +1,7 @@
 import { saveAuth } from '@/lib/auth';
 import { hash } from '@/lib/crypto';
-import redis from '@/lib/redis';
 import { parseRequest } from '@/lib/request';
-import { json, serverError } from '@/lib/response';
+import { json } from '@/lib/response';
 import { getUser } from '@/queries/prisma';
 
 export async function POST(request: Request) {
@@ -10,10 +9,6 @@ export async function POST(request: Request) {
 
   if (error) {
     return error();
-  }
-
-  if (!redis.enabled) {
-    return serverError('Redis is disabled');
   }
 
   const user = await getUser(auth.user.id, { includePassword: true });
