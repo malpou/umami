@@ -59,6 +59,18 @@ function getAuthenticator(): Authenticator | undefined {
     return credsAuthenticator(readFileSync(process.env.NATS_CREDS));
   }
 
+  // A Kubernetes ServiceAccount token that rotates (an auth callout verifies it). The
+  // authenticator runs on every connect, so each reconnect sends the current file, not
+  // the token the pod started with.
+  if (process.env.NATS_TOKEN_FILE) {
+    const file = process.env.NATS_TOKEN_FILE;
+
+    return usernamePasswordAuthenticator(
+      process.env.NATS_USER || process.env.SERVICE_IDENTITY,
+      () => readFileSync(file, 'utf8').trim(),
+    );
+  }
+
   if (process.env.NATS_USER) {
     return usernamePasswordAuthenticator(process.env.NATS_USER, process.env.NATS_PASSWORD);
   }
