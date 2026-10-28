@@ -1,25 +1,27 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useApi } from '@/components/hooks';
 import { removeClientAuthToken } from '@/lib/client';
 import { setUser } from '@/store/app';
 
-export function LogoutPage() {
-  const router = useRouter();
+export function LogoutPage({ oidcRpLogout }: { oidcRpLogout?: boolean }) {
   const { post } = useApi();
 
   useEffect(() => {
     async function logout() {
       await post('/auth/logout');
 
-      window.location.href = `${process.env.basePath || ''}/login`;
+      const basePath = process.env.basePath || '';
+
+      window.location.href = oidcRpLogout
+        ? `${basePath}/api/auth/oidc/logout`
+        : `${basePath}/login`;
     }
 
     removeClientAuthToken();
     setUser(null);
     logout();
-  }, [router, post]);
+  }, [oidcRpLogout, post]);
 
   return null;
 }

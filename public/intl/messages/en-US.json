@@ -433,7 +433,9 @@
     "never": "Never",
     "copy": "Copy",
     "authorize": "Authorize",
-    "deny": "Deny"
+    "deny": "Deny",
+    "continue-with": "Continue with {name}",
+    "login-with-password": "Log in with password"
   },
   "message": {
     "action-confirmation": "Type {confirmation} in the box below to confirm.",
@@ -521,6 +523,12 @@
     "two-factor-locked-message": "Too many failed attempts. Try again at {time}.",
     "two-factor-active-description": "Your account is protected with two-factor authentication. Each login requires a code from your authenticator app.",
     "api-key-created": "Copy your API key now. You won't be able to see it again.",
-    "no-api-keys": "You have not created any API keys."
+    "no-api-keys": "You have not created any API keys.",
+    "local-login-disabled": "Password login is disabled. Use single sign-on instead.",
+    "oidc-failed": "Single sign-on failed. Please try again.",
+    "oidc-no-role": "Your account has not been granted access. Contact your administrator.",
+    "oidc-provision-failed": "Unable to create your account. Contact your administrator.",
+    "oidc-state": "Your login session expired. Please try again.",
+    "oidc-unavailable": "The identity provider is unavailable. Please try again later."
   }
 }

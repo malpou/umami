@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getOidcConfig } from '@/lib/oidc';
 import { LogoutPage } from './LogoutPage';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +9,9 @@ export default function () {
     return null;
   }
 
-  return <LogoutPage />;
+  const oidc = getOidcConfig();
+
+  return <LogoutPage oidcRpLogout={oidc.enabled && oidc.rpLogout} />;
 }
 
 export const metadata: Metadata = {

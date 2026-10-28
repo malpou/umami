@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { defineOperation } from '@/openapi/operation';
 import {
   badRequestResponse,
+  forbiddenResponse,
   jsonResponse,
   serviceUnavailableResponse,
   unauthorizedResponse,
@@ -63,6 +64,7 @@ const loginOperation = defineOperation({
       '200': jsonResponse(loginResponseSchema, 'Authenticated successfully.'),
       '400': badRequestResponse,
       '401': unauthorizedResponse,
+      '403': forbiddenResponse,
       '503': serviceUnavailableResponse,
     },
   },

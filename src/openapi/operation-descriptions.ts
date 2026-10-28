@@ -80,7 +80,7 @@ export const operationDescriptions: Record<string, OperationDescription> = {
   'POST /api/auth/login': {
     summary: 'Log in',
     description:
-      'Authenticates a user with a username and password. Users with two-factor authentication receive a short-lived partial token to complete sign-in.',
+      'Authenticates a user with a username and password. Users with two-factor authentication receive a short-lived partial token to complete sign-in. Returns 403 when single sign-on is enabled and password login is not allowed.',
   },
   'POST /api/auth/logout': {
     summary: 'Log out',
