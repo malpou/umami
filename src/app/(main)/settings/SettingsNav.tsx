@@ -16,7 +16,7 @@ export function SettingsNav({
 
   const items = [
     {
-      label: t(labels.application),
+      label: t(labels.settings),
       items: [
         {
           id: 'preferences',
@@ -24,11 +24,6 @@ export function SettingsNav({
           path: renderUrl('/settings/preferences'),
           icon: <Settings2 />,
         },
-      ],
-    },
-    {
-      label: t(labels.account),
-      items: [
         {
           id: 'profile',
           label: t(labels.profile),
@@ -47,6 +42,7 @@ export function SettingsNav({
           path: renderUrl('/settings/security'),
           icon: <ShieldCheck />,
         },
+        // API keys are disabled in this fork (see isApiKeyEnabled), so no menu entry.
       ],
     },
   ];

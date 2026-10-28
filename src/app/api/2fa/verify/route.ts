@@ -1,13 +1,17 @@
 import { z } from 'zod';
-import prisma from '@/lib/prisma';
 import { getBearerToken, saveAuth } from '@/lib/auth';
-import { ROLES } from '@/lib/constants';
-import { secret } from '@/lib/crypto';
+import { PARTIAL_AUTH_TOKEN_TYPE, ROLES } from '@/lib/constants';
+import { hash, secret } from '@/lib/crypto';
 import { parseSecureToken } from '@/lib/jwt';
+import prisma from '@/lib/prisma';
 import { parseRequest } from '@/lib/request';
 import { badRequest, json, notFound, serviceUnavailable, unauthorized } from '@/lib/response';
 import { verifyBackupCode } from '@/lib/two-factor/backup-codes';
-import { decryptSecret, getTwoFactorConfigurationError, isTwoFactorConfigured } from '@/lib/two-factor/crypto';
+import {
+  decryptSecret,
+  getTwoFactorConfigurationError,
+  isTwoFactorConfigured,
+} from '@/lib/two-factor/crypto';
 import { checkRateLimit, recordFailedAttempt, resetRateLimit } from '@/lib/two-factor/rate-limit';
 import { isOtpReplayed, markOtpUsed } from '@/lib/two-factor/replay-prevention';
 import { verifyTotp } from '@/lib/two-factor/totp';
@@ -29,7 +33,7 @@ export async function POST(request: Request) {
   }
 
   const payload = parseSecureToken(rawToken, secret()) as any;
-  if (!payload || payload.type !== 'partial-auth' || !payload.userId) {
+  if (!payload || payload.type !== PARTIAL_AUTH_TOKEN_TYPE || !payload.userId) {
     return unauthorized({ code: 'two-factor-error-invalid-partial-token' });
   }
 
@@ -43,7 +47,7 @@ export async function POST(request: Request) {
   }
 
   const userId = payload.userId as string;
-  const user = await getUser(userId);
+  const user = await getUser(userId, { includePassword: true });
 
   if (!user) {
     return unauthorized();
@@ -126,8 +130,10 @@ export async function POST(request: Request) {
   }
 
   const { id, role, createdAt, username } = user;
+  // Bind token to password hash so a password change invalidates old tokens.
+  const pwd = hash(user.password);
 
-  const fullToken = await saveAuth({ userId: id, role });
+  const fullToken = await saveAuth({ userId: id, role, pwd });
 
   const teams = await getAllUserTeams(id);
 
