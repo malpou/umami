@@ -81,9 +81,9 @@ describe('isApiKeyEnabled', () => {
     expect(isApiKeyEnabled()).toBe(false);
   });
 
-  test('is enabled when CLOUD_MODE is unset', () => {
+  test('is disabled in this fork even when CLOUD_MODE is unset', () => {
     vi.stubEnv('CLOUD_MODE', '');
 
-    expect(isApiKeyEnabled()).toBe(true);
+    expect(isApiKeyEnabled()).toBe(false);
   });
 });

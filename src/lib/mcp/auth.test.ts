@@ -34,18 +34,15 @@ describe('authenticateMcpRequest', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
-  test.each(['not-a-token', 'not-a-key'])(
-    'rejects non-API-key credentials: %s',
-    async token => {
-      await expect(authenticateMcpRequest(request(token))).resolves.toMatchObject({
-        ok: false,
-        status: 401,
-      });
-      expect(checkApiKeyAuthMock).not.toHaveBeenCalled();
-    },
-  );
+  test.each(['not-a-token', 'not-a-key'])('rejects non-API-key credentials: %s', async token => {
+    await expect(authenticateMcpRequest(request(token))).resolves.toMatchObject({
+      ok: false,
+      status: 401,
+    });
+    expect(checkApiKeyAuthMock).not.toHaveBeenCalled();
+  });
 
-  test('accepts self-hosted API keys and preserves owner identity', async () => {
+  test('rejects API keys because they are disabled in this fork', async () => {
     checkApiKeyAuthMock.mockResolvedValue({
       token: 'umami_key',
       user: { id: 'user-1' },
@@ -53,15 +50,11 @@ describe('authenticateMcpRequest', () => {
     } as never);
 
     await expect(authenticateMcpRequest(request('umami_key'))).resolves.toMatchObject({
-      ok: true,
-      userId: 'user-1',
-      authInfo: {
-        token: 'umami_key',
-        clientId: 'api-key:key-1',
-        scopes: [],
-        extra: { userId: 'user-1', authType: 'api-key' },
-      },
+      ok: false,
+      status: 401,
+      error: 'invalid_token',
     });
+    expect(checkApiKeyAuthMock).not.toHaveBeenCalled();
   });
 
   test('rejects revoked or unknown keys', async () => {

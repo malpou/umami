@@ -34,13 +34,13 @@ beforeEach(() => {
   });
 });
 
-test('DELETE removes a key owned by the current user', async () => {
+test('DELETE refuses outside cloud mode (disabled in this fork)', async () => {
   mocks.deleteApiKey.mockResolvedValue(1);
 
   const response = await deleteRequest();
 
-  expect(response.status).toBe(200);
-  expect(mocks.deleteApiKey).toHaveBeenCalledWith('key-1', 'user-1');
+  expect(response.status).toBe(404);
+  expect(mocks.deleteApiKey).not.toHaveBeenCalled();
 });
 
 test('DELETE returns 404 when the key does not belong to the user', async () => {

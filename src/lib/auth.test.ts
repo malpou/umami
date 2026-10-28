@@ -39,7 +39,6 @@ const kvMock = kv as unknown as {
   };
 };
 
-
 const PASSWORD_HASH = '$2b$10$currentpasswordhashvalue';
 
 function authedRequest() {
@@ -88,17 +87,16 @@ describe('checkAuth api keys', () => {
     } as any);
   }
 
-  test('authorizes a valid api key and looks it up by hash', async () => {
+  test('rejects a valid api key, because api keys are disabled in this fork', async () => {
     mockApiKey();
     mockUser();
+    parseSecureTokenMock.mockReturnValue(null);
 
-    const result: any = await checkAuth(apiKeyRequest());
+    const result = await checkAuth(apiKeyRequest());
 
-    expect(getApiKeyByHashMock).toHaveBeenCalledWith(hashApiKey(API_KEY));
-    expect(result?.user?.id).toBe('user-1');
-    expect(result?.user).not.toHaveProperty('password');
-    expect(result?.apiKey).toEqual({ id: 'key-1', name: 'CI' });
-    expect(parseSecureTokenMock).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+    expect(getApiKeyByHashMock).not.toHaveBeenCalled();
+    expect(getUserMock).not.toHaveBeenCalled();
   });
 
   test('rejects an unknown api key', async () => {
@@ -149,15 +147,6 @@ describe('checkAuth api keys', () => {
     expect(result).toBeNull();
     expect(getApiKeyByHashMock).not.toHaveBeenCalled();
     expect(parseSecureTokenMock).toHaveBeenCalled();
-  });
-
-  test('updates lastUsedAt when stale', async () => {
-    mockApiKey(new Date(Date.now() - 60 * 60 * 1000));
-    mockUser();
-
-    await checkAuth(apiKeyRequest());
-
-    expect(updateApiKeyLastUsedMock).toHaveBeenCalledWith('key-1');
   });
 
   test('does not update lastUsedAt when recently used', async () => {

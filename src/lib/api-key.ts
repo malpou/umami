@@ -37,6 +37,9 @@ export function isApiKeyBlockedPath(pathname: string) {
   return API_KEY_BLOCKED_PATHS.some(path => pathname === path || pathname.startsWith(`${path}/`));
 }
 
+// Disabled in this fork: a key never expires and survives removal of the user's
+// role at the identity provider, so revoking the grant would no longer cut access.
+// Upstream enables keys whenever CLOUD_MODE is unset; revert this to restore that.
 export function isApiKeyEnabled() {
-  return !process.env.CLOUD_MODE;
+  return false;
 }
