@@ -34,29 +34,14 @@ export function LoginPageWrapper({ children }: PropsWithChildren) {
 }
 
 export interface LoginPageProps {
-  oidcEnabled?: boolean;
-  oidcProviderName?: string;
-  oidcAuthorizeUrl?: string;
-  allowLocalLogin?: boolean;
+  guardIdentity?: boolean;
+  guardLoginUrl?: string;
 }
 
-export function LoginPage({
-  oidcEnabled,
-  oidcProviderName,
-  oidcAuthorizeUrl,
-  allowLocalLogin = true,
-}: LoginPageProps) {
+export function LoginPage({ guardIdentity, guardLoginUrl }: LoginPageProps) {
   return (
     <LoginPageWrapper>
-      {oidcEnabled ? (
-        <SsoLoginForm
-          providerName={oidcProviderName}
-          authorizeUrl={oidcAuthorizeUrl}
-          allowLocalLogin={allowLocalLogin}
-        />
-      ) : (
-        <LoginForm />
-      )}
+      {guardIdentity ? <SsoLoginForm loginUrl={guardLoginUrl} /> : <LoginForm />}
     </LoginPageWrapper>
   );
 }

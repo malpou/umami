@@ -15,6 +15,7 @@ import {
   SHARE_TOKEN_TYPE,
 } from '@/lib/constants';
 import { createAuthKey, hash, secret } from '@/lib/crypto';
+import { getGuardUserId, isGuardIdentityEnabled } from '@/lib/guard-identity';
 import { createSecureToken, parseSecureToken, parseToken } from '@/lib/jwt';
 import kv from '@/lib/kv';
 import { ensureArray } from '@/lib/utils';
@@ -73,6 +74,10 @@ export async function checkAuth(request: Request) {
 
   if (isApiKeyEnabled() && isApiKey(token)) {
     return checkApiKeyAuth(request, token);
+  }
+
+  if (isGuardIdentityEnabled()) {
+    return checkGuardAuth(request, token);
   }
 
   const payload = parseSecureToken(token, secret());
@@ -135,6 +140,27 @@ export async function checkAuth(request: Request) {
     user,
     authType: user ? ('session' as const) : ('share' as const),
   };
+}
+
+// Behind guard the only session is guard's: the user comes from the verified
+// identity header, and Umami's own session tokens are not accepted.
+export async function checkGuardAuth(request: Request, token?: string) {
+  const shareToken = parseShareToken(request);
+  const userId = await getGuardUserId(request);
+  const user: any = userId ? await getUser(userId) : null;
+
+  if (!user?.id) {
+    if (!shareToken || !request.headers.get(SHARE_CONTEXT_HEADER)) {
+      log('User not authorized');
+      return null;
+    }
+
+    return { token, shareToken, user: null, authType: 'share' as const };
+  }
+
+  user.isAdmin = user.role === ROLES.admin;
+
+  return { token, shareToken, user, authType: 'session' as const };
 }
 
 export async function saveAuth(data: any, expire = 0) {

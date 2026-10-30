@@ -6,9 +6,7 @@ export type Config = {
   cloudMode: boolean;
   faviconUrl?: string;
   linksUrl?: string;
-  oidcEnabled?: boolean;
-  oidcProviderName?: string;
-  oidcRpLogout?: boolean;
+  guardIdentity?: boolean;
   localLoginDisabled?: boolean;
   pixelsUrl?: string;
   privateMode: boolean;

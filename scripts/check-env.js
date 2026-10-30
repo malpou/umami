@@ -28,17 +28,17 @@ if (process.env.CLOUD_URL) {
   checkMissing(['CLOUD_URL', 'CLICKHOUSE_URL']);
 }
 
-if (process.env.OIDC_ISSUER) {
-  checkMissing(['OIDC_CLIENT_ID', 'APP_URL']);
+if (process.env.GUARD_IDENTITY) {
+  checkMissing(['PLATFORM_KIT_EDGEAUTH_AUDIENCES', 'GUARD_USER_ISSUER']);
 
   if (
-    !process.env.OIDC_ROLE_ADMIN &&
-    !process.env.OIDC_ROLE_USER &&
-    !process.env.OIDC_ROLE_VIEW_ONLY
+    !process.env.GUARD_ROLE_ADMIN &&
+    !process.env.GUARD_ROLE_USER &&
+    !process.env.GUARD_ROLE_VIEW_ONLY
   ) {
     console.log(
-      'OIDC is enabled but no role mapping is defined. ' +
-        'Set at least one of OIDC_ROLE_ADMIN, OIDC_ROLE_USER, or OIDC_ROLE_VIEW_ONLY.',
+      'GUARD_IDENTITY is set but no role mapping is defined. ' +
+        'Set at least one of GUARD_ROLE_ADMIN, GUARD_ROLE_USER, or GUARD_ROLE_VIEW_ONLY.',
     );
     process.exit(1);
   }

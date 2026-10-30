@@ -1,3 +1,4 @@
+import { EdgeAuthUnavailable } from '@metsaapp/edgeauth';
 import { startOfMonth, subMonths } from 'date-fns';
 import { z } from 'zod';
 import { checkAuth } from '@/lib/auth';
@@ -9,7 +10,7 @@ import {
   parseSessionPropertyFilters,
   parseUniversalEventPropertyFilters,
 } from '@/lib/params';
-import { badRequest, unauthorized } from '@/lib/response';
+import { badRequest, serviceUnavailable, unauthorized } from '@/lib/response';
 import type { QueryFilters } from '@/lib/types';
 import { getWebsiteSegment } from '@/queries/prisma';
 
@@ -49,7 +50,16 @@ export async function parseRequest(
   }
 
   if (!options?.skipAuth && !error) {
-    auth = await checkAuth(request);
+    try {
+      auth = await checkAuth(request);
+    } catch (e) {
+      // Guard's identity keys are unreachable: neither signed in nor refused.
+      if (!(e instanceof EdgeAuthUnavailable)) {
+        throw e;
+      }
+
+      return { url, query, body, auth, error: () => serviceUnavailable() };
+    }
 
     if (!auth) {
       error = () => unauthorized();

@@ -1,20 +1,19 @@
 import { saveAuth } from '@/lib/auth';
 import { PARTIAL_AUTH_TOKEN_TYPE, ROLES } from '@/lib/constants';
 import { hash, secret } from '@/lib/crypto';
+import { isGuardIdentityEnabled } from '@/lib/guard-identity';
 import { createSecureToken } from '@/lib/jwt';
 import { checkPassword } from '@/lib/password';
 import prisma from '@/lib/prisma';
 import { parseRequest } from '@/lib/request';
-import { getOidcConfig } from '@/lib/oidc';
 import { forbidden, json, serviceUnavailable, unauthorized } from '@/lib/response';
 import { getTwoFactorConfigurationError, isTwoFactorConfigured } from '@/lib/two-factor/crypto';
 import { getAllUserTeams, getUserByUsername } from '@/queries/prisma';
 import { loginRequestSchema } from './schema';
 
 export async function POST(request: Request) {
-  const oidc = getOidcConfig();
-
-  if (oidc.enabled && !oidc.allowLocalLogin) {
+  // Behind guard, signing in is guard's job and no Umami session is accepted.
+  if (isGuardIdentityEnabled()) {
     return forbidden({ code: 'local-login-disabled' });
   }
 
