@@ -88,8 +88,6 @@ export const labels: Record<string, string> = {
   login: 'label.login',
   authorize: 'label.authorize',
   deny: 'label.deny',
-  continueWith: 'label.continue-with',
-  loginWithPassword: 'label.login-with-password',
   logout: 'label.logout',
   singleDay: 'label.single-day',
   dateRange: 'label.date-range',

@@ -79,51 +79,43 @@ bucket cannot be read. It binds to existing buckets and never creates them.
 | `NATS_KV_AUTH_BUCKET` | no | `umami_auth` | Bucket for login sessions |
 | `NATS_KV_CACHE_BUCKET` | no | `umami_cache` | Bucket for cached websites, links and pixels |
 
-Session lifetimes: password and two-factor logins last 1 hour, SSO logins last `OIDC_SESSION_DURATION`,
-and share-to-SSO tokens last 24 hours. The expiry is stored with each entry and checked on read. If the
+Session lifetimes: password and two-factor logins last 1 hour and share-to-SSO tokens last 24 hours.
+Behind guard (below) Umami stores no login sessions; the auth bucket then stays empty. The expiry is stored with each entry and checked on read. If the
 auth bucket allows per-message TTLs (`--marker-ttl`), the server also removes sessions when they expire.
-Give both buckets a max age (`--ttl`) at least as long as the longest session (24 hours unless `OIDC_SESSION_DURATION` is longer). The NATS user needs publish rights on
+Give both buckets a max age (`--ttl`) at least as long as the longest session (24 hours). The NATS user needs publish rights on
 `$KV.<bucket>.>` and access to the `$JS.API.STREAM.INFO`, `$JS.API.DIRECT.GET` and `$JS.API.STREAM.MSG.GET`
 APIs for `KV_<bucket>`.
 
-### OIDC / Single Sign-On (optional)
+### Sign-in through guard (optional)
 
-Umami can authenticate users against any OpenID Connect provider using the authorization code flow with
-PKCE. Users are provisioned automatically on first login, and their umami role is derived from role claims
-in the ID token (or userinfo) on **every** login — the identity provider is the source of truth for access.
+Behind guard (the platform's edge auth proxy), this fork has no OIDC client and no login sessions of its
+own. Guard is the OIDC relying party (Zitadel), owns the sessions and their revocation, and hands every request
+it lets through a short-lived ES256 identity JWT in `x-bastion-identity`. Umami verifies it with
+[`@metsaapp/edgeauth`](https://github.com/MetsaApp/platform-kit) on every API request (`checkAuth`) and maps it to
+the Umami user linked to the Zitadel subject (`user.oidc_issuer`, `user.oidc_subject`), creating one on first
+sight. The role is re-derived from the identity's role keys on every request; an identity with no mapped role is
+refused (401). Login and logout go to guard's `/.well-known/bastion/login` and `/.well-known/bastion/logout`.
 
-When OIDC is enabled, local password login is disabled (both the login form and the API) unless
-`OIDC_ALLOW_LOCAL_LOGIN` is set.
+With `GUARD_IDENTITY` set, password login is off (`/api/auth/login` answers 403) and Umami's own session tokens are
+not accepted; share links still work through their share token. A request whose identity cannot be verified
+because guard's keys are unreachable gets 503.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `OIDC_ISSUER` | yes | — | Issuer URL; discovery document is read from `<issuer>/.well-known/openid-configuration` |
-| `OIDC_CLIENT_ID` | yes | — | OAuth client ID |
-| `OIDC_CLIENT_SECRET` | no | — | Omit for a public client using PKCE; set for a confidential client |
-| `APP_URL` | yes | — | Public base URL of your umami instance, e.g. `https://analytics.example.com` |
-| `OIDC_ROLE_ADMIN` | * | — | Comma-separated provider role keys mapped to the umami `admin` role |
-| `OIDC_ROLE_USER` | * | — | Comma-separated provider role keys mapped to the umami `user` role |
-| `OIDC_ROLE_VIEW_ONLY` | * | — | Comma-separated provider role keys mapped to the umami `view-only` role |
-| `OIDC_SCOPES` | no | `openid profile email` | Requested scopes; add any provider-specific scope needed to receive role claims |
-| `OIDC_ROLES_CLAIM` | no | `roles` | Claim containing the user's roles (object map, array, or delimited string); exact names — including URN/URL-style names — are matched first, and dot notation reads nested claims (e.g. `realm_access.roles`) |
-| `OIDC_ALLOW_LOCAL_LOGIN` | no | off | Keep username/password login available alongside SSO (break-glass) |
-| `OIDC_PROVIDER_NAME` | no | `SSO` | Name shown on the login button |
-| `OIDC_RP_LOGOUT` | no | off | Also end the identity provider session on logout |
-| `OIDC_AUTO_LINK_USERNAME` | no | off | Link an SSO login to an existing local account with the same username (only from `preferred_username`, or from `email` when `email_verified` is true) |
-| `OIDC_SESSION_DURATION` | no | `24h` | Lifetime of umami sessions created via SSO (e.g. `12h`, `30m`, `7d`) |
+| `GUARD_IDENTITY` | yes | off | Turn sign-in through guard on |
+| `PLATFORM_KIT_EDGEAUTH_AUDIENCES` | yes | — | The hosts Umami serves, comma-separated (the identity JWT's `aud`) |
+| `PLATFORM_KIT_EDGEAUTH_JWKS_URL` | no | guard in-cluster | Guard's JWKS |
+| `GUARD_USER_ISSUER` | yes | — | The Zitadel issuer users are linked under, e.g. `https://auth.metsa.app` (the old `OIDC_ISSUER`, so existing users keep their data) |
+| `GUARD_ROLE_ADMIN` | * | — | Comma-separated role keys mapped to the umami `admin` role |
+| `GUARD_ROLE_USER` | * | — | Comma-separated role keys mapped to the umami `user` role |
+| `GUARD_ROLE_VIEW_ONLY` | * | — | Comma-separated role keys mapped to the umami `view-only` role |
+| `GUARD_AUTO_LINK_USERNAME` | no | off | Link a first sign-in to an existing local account whose username is the identity's verified email |
 
-\* At least one of the three role mappings must be set. A user with none of the mapped roles is denied access.
+\* At least one of the three role mappings must be set.
 
-Do not combine `DISABLE_LOGIN` with OIDC — the login page must render to show the single sign-on button.
-Users who were already logged in with a local account keep their existing sessions when OIDC is enabled;
-rotate `APP_SECRET` to force everyone through the identity provider.
-
-Provider setup: register a web application using the authorization code flow with **PKCE** (no client
-secret needed; set `OIDC_CLIENT_SECRET` if you use a confidential client instead), set the redirect URI to
-`<APP_URL>/api/auth/oidc/callback` and the post-logout redirect URI to `<APP_URL>/login`, define roles
-(e.g. `umami-admin`, `umami-user`) and grant them to your users. Make sure the provider includes the roles
-in the ID token or userinfo response — the claim name and any extra scope this requires vary by provider,
-so set `OIDC_ROLES_CLAIM` and `OIDC_SCOPES` accordingly.
+Without `GUARD_IDENTITY` the fork logs in with Umami's own username and password, as upstream does. That is
+also the break-glass path for a local account that has a password: unset `GUARD_IDENTITY` and reach the pod
+directly (port-forward), never through a public route.
 
 ### Build the Application
 

@@ -117,3 +117,17 @@ test('POST stores the session in KV instead of minting a stateless token', async
   expect(mocks.createSecureToken).not.toHaveBeenCalled();
   await expect(response.json()).resolves.toMatchObject({ token: 'session-token' });
 });
+
+test('POST refuses password login behind guard', async () => {
+  vi.stubEnv('GUARD_IDENTITY', '1');
+
+  const response = await POST(new Request('http://localhost/api/auth/login', { method: 'POST' }));
+
+  vi.unstubAllEnvs();
+  expect(response.status).toBe(403);
+  await expect(response.json()).resolves.toMatchObject({
+    error: { code: 'local-login-disabled' },
+  });
+  expect(mocks.checkPassword).not.toHaveBeenCalled();
+  expect(mocks.saveAuth).not.toHaveBeenCalled();
+});

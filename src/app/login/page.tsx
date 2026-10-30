@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getOidcConfig } from '@/lib/oidc';
+import { guardLoginUrl, isGuardIdentityEnabled } from '@/lib/guard-identity';
 import { LoginPage } from './LoginPage';
 
 export const dynamic = 'force-dynamic';
@@ -9,14 +9,12 @@ export default async function () {
     return null;
   }
 
-  const oidc = getOidcConfig();
-
+  // Behind guard the page only offers guard's login: no redirect of its own, so
+  // a signed-in user without an Umami role cannot loop through it.
   return (
     <LoginPage
-      oidcEnabled={oidc.enabled}
-      oidcProviderName={oidc.providerName}
-      oidcAuthorizeUrl={`${oidc.basePath}/api/auth/oidc/authorize`}
-      allowLocalLogin={!oidc.enabled || oidc.allowLocalLogin}
+      guardIdentity={isGuardIdentityEnabled()}
+      guardLoginUrl={guardLoginUrl(`${process.env.BASE_PATH || ''}/`)}
     />
   );
 }

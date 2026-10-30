@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 const { checkKv } = vi.hoisted(() => ({ checkKv: vi.fn() }));
 
 vi.mock('@/lib/kv', () => ({ checkKv }));
+vi.mock('@/queries/prisma/user', () => ({}));
 
 import { register } from './instrumentation';
 
@@ -19,6 +20,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   delete process.env.NEXT_RUNTIME;
 });
 
@@ -49,4 +51,30 @@ test('skips the check outside the Node.js runtime and during the build', async (
   await register();
 
   expect(checkKv).not.toHaveBeenCalled();
+});
+
+test('exits when GUARD_IDENTITY is set without a role mapping', async () => {
+  vi.stubEnv('GUARD_IDENTITY', '1');
+  vi.stubEnv('PLATFORM_KIT_EDGEAUTH_AUDIENCES', 'insights.example.com');
+  vi.stubEnv('GUARD_USER_ISSUER', 'https://idp.example.com');
+  vi.stubEnv('GUARD_ROLE_ADMIN', '');
+  vi.stubEnv('GUARD_ROLE_USER', '');
+  vi.stubEnv('GUARD_ROLE_VIEW_ONLY', '');
+
+  await register();
+
+  expect(exit).toHaveBeenCalledWith(1);
+  expect(checkKv).not.toHaveBeenCalled();
+});
+
+test('starts behind guard when the identity config is complete', async () => {
+  vi.stubEnv('GUARD_IDENTITY', '1');
+  vi.stubEnv('PLATFORM_KIT_EDGEAUTH_AUDIENCES', 'insights.example.com');
+  vi.stubEnv('GUARD_USER_ISSUER', 'https://idp.example.com');
+  vi.stubEnv('GUARD_ROLE_ADMIN', 'umami-admin');
+  checkKv.mockResolvedValue({ auth: 'umami_auth', cache: 'umami_cache' });
+
+  await register();
+
+  expect(exit).not.toHaveBeenCalled();
 });

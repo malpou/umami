@@ -4,7 +4,7 @@ import { useApi } from '@/components/hooks';
 import { removeClientAuthToken } from '@/lib/client';
 import { setUser } from '@/store/app';
 
-export function LogoutPage({ oidcRpLogout }: { oidcRpLogout?: boolean }) {
+export function LogoutPage({ guardIdentity }: { guardIdentity?: boolean }) {
   const { post } = useApi();
 
   useEffect(() => {
@@ -13,15 +13,15 @@ export function LogoutPage({ oidcRpLogout }: { oidcRpLogout?: boolean }) {
 
       const basePath = process.env.basePath || '';
 
-      window.location.href = oidcRpLogout
-        ? `${basePath}/api/auth/oidc/logout`
-        : `${basePath}/login`;
+      // Guard's logout ends its session and the Zitadel one; it lives at the
+      // host root, outside BASE_PATH.
+      window.location.href = guardIdentity ? '/.well-known/bastion/logout' : `${basePath}/login`;
     }
 
     removeClientAuthToken();
     setUser(null);
     logout();
-  }, [oidcRpLogout, post]);
+  }, [guardIdentity, post]);
 
   return null;
 }
