@@ -44,14 +44,28 @@ const mocks = vi.hoisted(() => {
 
   const buckets = new Map<string, FakeBucket>();
 
-  return {
+  // A NatsConnection whose closed() resolves when the test calls end(), the way
+  // nats.js resolves it (with the error, if any) once the client gives up.
+  function fakeConnection() {
+    let end: (err?: Error) => void;
+    const closed = new Promise<undefined | Error>(resolve => {
+      end = resolve;
+    });
+
+    return { close: mocks.close, closed: () => closed, end: (err?: Error) => end(err) };
+  }
+
+  const mocks = {
     FakeBucket,
+    fakeConnection,
     buckets,
     connect: vi.fn(),
     close: vi.fn(),
     usernamePasswordAuthenticator: vi.fn((user: string, pass?: string) => ({ user, pass })),
     credsAuthenticator: vi.fn((creds: Uint8Array) => ({ creds })),
   };
+
+  return mocks;
 });
 
 vi.mock('@nats-io/transport-node', () => ({
@@ -111,7 +125,7 @@ beforeEach(() => {
   mocks.buckets.set('umami_cache', new mocks.FakeBucket());
   mocks.connect.mockReset();
   mocks.close.mockReset();
-  mocks.connect.mockResolvedValue({ close: mocks.close });
+  mocks.connect.mockImplementation(async () => mocks.fakeConnection());
 });
 
 afterEach(() => {
@@ -259,6 +273,31 @@ describe('checkKv', () => {
 
     await expect(checkKv()).rejects.toThrow('connection refused');
     await expect(checkKv()).resolves.toEqual({ auth: 'umami_auth', cache: 'umami_cache' });
+  });
+
+  test('keeps reconnecting after an auth error, since the callout JWT expires hourly', async () => {
+    const { checkKv } = await loadKv();
+
+    await checkKv();
+
+    expect(mocks.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ ignoreAuthErrorAbort: true, maxReconnectAttempts: -1 }),
+    );
+  });
+
+  test('replaces a closed connection on the next call and logs why it closed', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { default: kv } = await loadKv();
+
+    await kv.cache.set('website:w1', { id: 'w1' }, 60);
+    const first = await mocks.connect.mock.results[0].value;
+    first.end(new Error("'Authorization Violation'"));
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
+
+    await expect(kv.cache.get('website:w1')).resolves.toEqual({ id: 'w1' });
+    expect(mocks.connect).toHaveBeenCalledTimes(2);
+    expect(errorSpy).toHaveBeenCalledWith("NATS KV connection closed: 'Authorization Violation'");
+    errorSpy.mockRestore();
   });
 
   test('uses the configured bucket names and user/password auth', async () => {
