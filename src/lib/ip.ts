@@ -58,33 +58,55 @@ function resolveIp(ip?: string | null) {
   }
 }
 
-function parseHeaderValue(header: string, value: string) {
-  if (header === 'x-forwarded-for') {
-    return resolveIp(value?.split(',')?.[0]?.trim());
-  }
+// metsa: the client address is the rightmost X-Forwarded-For entry outside
+// the cluster's own ranges, never a header the client can set. Umami runs
+// DNS-only behind Envoy Gateway, which appends the address it accepted the
+// connection from (the Hetzner load balancer's PROXY protocol peer) as the
+// last entry; everything before it is the client's to write. The pod network
+// (100.64.0.0/10, "carrierGradeNat" to ipaddr.js), private and loopback
+// entries are skipped, in case anything inside the cluster appends its own.
+// CLIENT_IP_HEADER and the CDN headers in IP_ADDRESS_HEADERS are ignored:
+// nothing in front of Umami sets them, so any client could.
+const INTERNAL_RANGES = new Set([
+  'private',
+  'loopback',
+  'carrierGradeNat',
+  'linkLocal',
+  'uniqueLocal',
+  'unspecified',
+]);
 
-  if (header === 'forwarded') {
-    const match = value.match(/for=(\[?[0-9a-fA-F:.]+]?)/);
+function isInternal(ip: string) {
+  const addr = ipaddr.process(ip);
 
-    return match ? resolveIp(match[1]) : undefined;
-  }
-
-  return resolveIp(value);
+  return INTERNAL_RANGES.has(addr.range());
 }
 
 export function getIpAddress(headers: Headers) {
-  const customHeader = process.env.CLIENT_IP_HEADER;
+  const value = headers.get('x-forwarded-for');
 
-  if (customHeader && headers.get(customHeader)) {
-    return parseHeaderValue(customHeader.toLowerCase(), headers.get(customHeader));
-  }
-
-  const header = IP_ADDRESS_HEADERS.find(name => headers.get(name));
-  if (!header) {
+  if (!value) {
     return undefined;
   }
 
-  return parseHeaderValue(header, headers.get(header));
+  const entries = value.split(',').map(entry => resolveIp(entry.trim()));
+
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const ip = entries[i];
+
+    // An entry that is no address was not written by the gateway: trust
+    // nothing before it.
+    if (!ip || !ipaddr.isValid(ip)) {
+      return undefined;
+    }
+
+    if (!isInternal(ip)) {
+      return ip;
+    }
+  }
+
+  // Every entry is internal: a request from inside the cluster.
+  return entries[0];
 }
 
 export function stripPort(ip?: string | null) {

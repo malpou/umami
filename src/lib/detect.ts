@@ -135,8 +135,12 @@ export async function getLocation(ip: string = '', headers: Headers, skipHeaders
 
 export async function getClientInfo(request: Request, payload: Record<string, any>) {
   const userAgent = payload?.userAgent || request.headers.get('user-agent');
-  const ip = payload?.ip || getIpAddress(request.headers);
-  const location = await getLocation(ip, request.headers, !!payload?.ip);
+  // metsa: the address and its location come from the gateway's
+  // X-Forwarded-For entry only. payload.ip and the CDN location headers
+  // (cf-ipcountry and the rest) are the client's own to write, as Umami runs
+  // with no CDN in front; the location is MaxMind's.
+  const ip = getIpAddress(request.headers);
+  const location = await getLocation(ip, request.headers, true);
   const country = safeDecodeURIComponent(location?.country);
   const region = safeDecodeURIComponent(location?.region);
   const city = safeDecodeURIComponent(location?.city);

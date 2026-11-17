@@ -1,8 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { getLocation, hasBlockedIp } from './detect';
-import { getIpAddress } from './ip';
-
-const IP = '127.0.0.1';
+import { getClientInfo, getLocation, hasBlockedIp } from './detect';
 
 const isLocalhost = vi.mocked(await import('is-localhost-ip'));
 
@@ -18,28 +15,29 @@ beforeEach(() => {
   delete process.env.SKIP_LOCATION_HEADERS;
 });
 
-test('getIpAddress: Custom header', () => {
-  process.env.CLIENT_IP_HEADER = 'x-custom-ip-header';
+const CLIENT = '89.167.61.215';
 
-  expect(getIpAddress(new Headers({ 'x-custom-ip-header': IP }))).toEqual(IP);
-});
+test('getClientInfo: payload.ip and CDN location headers are ignored', async () => {
+  isLocalhost.default.mockResolvedValue(false);
+  (globalThis as Record<string, unknown>).maxmind = {
+    get: (ip: string) => (ip === CLIENT ? { country: { iso_code: 'DE' } } : undefined),
+  };
 
-test('getIpAddress: Custom header set to x-forwarded-for uses leftmost IP in chain', () => {
-  process.env.CLIENT_IP_HEADER = 'x-forwarded-for';
+  const info = await getClientInfo(
+    new Request('https://insights.metsa.app/api/send', {
+      headers: {
+        'x-forwarded-for': `198.51.100.250, ${CLIENT}`,
+        'cf-ipcountry': 'KP',
+        'x-metsa-client-ip': '203.0.113.250',
+        'user-agent': 'Mozilla/5.0',
+      },
+    }),
+    { ip: '203.0.113.251' },
+  );
 
-  expect(getIpAddress(new Headers({ 'x-forwarded-for': `${IP}, 10.0.0.1, 10.0.0.2` }))).toEqual(IP);
-});
-
-test('getIpAddress: CloudFlare header', () => {
-  expect(getIpAddress(new Headers({ 'cf-connecting-ip': IP }))).toEqual(IP);
-});
-
-test('getIpAddress: Standard header', () => {
-  expect(getIpAddress(new Headers({ 'x-forwarded-for': IP }))).toEqual(IP);
-});
-
-test('getIpAddress: No header', () => {
-  expect(getIpAddress(new Headers())).toEqual(undefined);
+  expect(info.ip).toEqual(CLIENT);
+  expect(info.country).toEqual('DE');
+  delete (globalThis as Record<string, unknown>).maxmind;
 });
 
 test('getLocation: returns null for malformed ip', async () => {

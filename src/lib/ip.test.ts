@@ -9,83 +9,72 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+// metsa: Envoy Gateway appends the address it accepted the connection from
+// as the last X-Forwarded-For entry; every other entry and header is the
+// client's to write.
+const CLIENT = '89.167.61.215';
+
 describe('getIpAddress', () => {
-  test('returns undefined when no known headers are present', () => {
+  test('returns undefined without x-forwarded-for', () => {
     expect(getIpAddress(headers({}))).toBeUndefined();
   });
 
-  test('extracts the first address from an x-forwarded-for chain', () => {
-    expect(getIpAddress(headers({ 'x-forwarded-for': '1.2.3.4, 5.6.7.8, 9.10.11.12' }))).toBe(
-      '1.2.3.4',
+  test("takes the gateway's last x-forwarded-for entry", () => {
+    expect(getIpAddress(headers({ 'x-forwarded-for': CLIENT }))).toBe(CLIENT);
+  });
+
+  test('ignores a forged first x-forwarded-for entry', () => {
+    expect(getIpAddress(headers({ 'x-forwarded-for': ` 198.51.100.250 , ${CLIENT} ` }))).toBe(
+      CLIENT,
     );
   });
 
-  test('trims whitespace around the x-forwarded-for client address', () => {
-    expect(getIpAddress(headers({ 'x-forwarded-for': '  1.2.3.4  , 5.6.7.8' }))).toBe('1.2.3.4');
-  });
-
-  test('reads the Cloudflare cf-connecting-ip header', () => {
-    expect(getIpAddress(headers({ 'cf-connecting-ip': '203.0.113.5' }))).toBe('203.0.113.5');
-  });
-
-  test('reads the Fastly fastly-client-ip header', () => {
-    expect(getIpAddress(headers({ 'fastly-client-ip': '198.51.100.7' }))).toBe('198.51.100.7');
-  });
-
-  test('reads the x-real-ip reverse proxy header', () => {
-    expect(getIpAddress(headers({ 'x-real-ip': '192.0.2.9' }))).toBe('192.0.2.9');
-  });
-
-  test('parses the RFC 7239 forwarded header', () => {
-    expect(getIpAddress(headers({ forwarded: 'for=192.0.2.60;proto=http;by=203.0.113.43' }))).toBe(
-      '192.0.2.60',
-    );
-  });
-
-  test('prefers higher-priority vendor headers over x-forwarded-for', () => {
+  test('skips pod network, private and loopback entries after it', () => {
     expect(
       getIpAddress(
-        headers({
-          'cf-connecting-ip': '203.0.113.5',
-          'x-forwarded-for': '1.2.3.4',
-        }),
+        headers({ 'x-forwarded-for': `198.51.100.250,${CLIENT}, 100.64.2.112, 10.0.0.1, ::1` }),
       ),
-    ).toBe('203.0.113.5');
+    ).toBe(CLIENT);
+  });
+
+  test('never reads a header a client can set', () => {
+    vi.stubEnv('CLIENT_IP_HEADER', 'x-metsa-client-ip');
+    for (const name of [
+      'x-metsa-client-ip',
+      'true-client-ip',
+      'cf-connecting-ip',
+      'fastly-client-ip',
+      'x-real-ip',
+      'forwarded',
+    ]) {
+      const value = name === 'forwarded' ? 'for=203.0.113.250' : '203.0.113.250';
+      expect(getIpAddress(headers({ [name]: value, 'x-forwarded-for': CLIENT })), name).toBe(
+        CLIENT,
+      );
+      expect(getIpAddress(headers({ [name]: value })), name).toBeUndefined();
+    }
   });
 
   test('normalizes a full IPv6 address to compressed form', () => {
-    expect(getIpAddress(headers({ 'x-real-ip': '2001:0db8:0000:0000:0000:0000:0000:0001' }))).toBe(
-      '2001:db8::1',
-    );
+    expect(
+      getIpAddress(headers({ 'x-forwarded-for': '2001:0db8:0000:0000:0000:0000:0000:0001' })),
+    ).toBe('2001:db8::1');
   });
 
   test('converts an IPv4-mapped IPv6 address to IPv4', () => {
-    expect(getIpAddress(headers({ 'x-real-ip': '::ffff:1.2.3.4' }))).toBe('1.2.3.4');
+    expect(getIpAddress(headers({ 'x-forwarded-for': `::ffff:${CLIENT}` }))).toBe(CLIENT);
   });
 
   test('strips the port from an IPv4 address with a port', () => {
-    expect(getIpAddress(headers({ 'x-real-ip': '1.2.3.4:8080' }))).toBe('1.2.3.4');
+    expect(getIpAddress(headers({ 'x-forwarded-for': `${CLIENT}:8080` }))).toBe(CLIENT);
   });
 
-  test('returns garbage input unchanged as a fallback', () => {
-    expect(getIpAddress(headers({ 'x-real-ip': 'not-an-ip' }))).toBe('not-an-ip');
+  test('trusts nothing when the last entry is no address', () => {
+    expect(getIpAddress(headers({ 'x-forwarded-for': `${CLIENT}, not-an-ip` }))).toBeUndefined();
   });
 
-  test('uses a custom CLIENT_IP_HEADER when configured', () => {
-    vi.stubEnv('CLIENT_IP_HEADER', 'x-custom-ip');
-    expect(
-      getIpAddress(
-        headers({
-          'x-custom-ip': '10.0.0.1',
-          'x-forwarded-for': '1.2.3.4',
-        }),
-      ),
-    ).toBe('10.0.0.1');
-  });
-
-  test('falls back to standard headers when CLIENT_IP_HEADER is absent from the request', () => {
-    vi.stubEnv('CLIENT_IP_HEADER', 'x-custom-ip');
-    expect(getIpAddress(headers({ 'x-real-ip': '192.0.2.9' }))).toBe('192.0.2.9');
+  test('returns the first entry when every entry is internal', () => {
+    expect(getIpAddress(headers({ 'x-forwarded-for': '10.0.0.1, 100.64.2.112' }))).toBe('10.0.0.1');
   });
 });
 
