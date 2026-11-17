@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { getIpAddress, stripPort } from './ip';
+import { getClientIp, getIpAddress, stripPort } from './ip';
 
 function headers(init: Record<string, string>) {
   return new Headers(init);
@@ -99,5 +99,27 @@ describe('stripPort', () => {
 
   test('leaves an unbracketed IPv6 address unchanged', () => {
     expect(stripPort('::1')).toBe('::1');
+  });
+});
+
+describe('getClientIp', () => {
+  test('through the gateway: the gateway entry, never payload.ip', () => {
+    const headers = new Headers({ 'x-forwarded-for': '203.0.113.9, 198.51.100.7' });
+    expect(getClientIp(headers, '192.0.2.55')).toBe('198.51.100.7');
+  });
+
+  test('through the gateway with no usable entry: no address, payload.ip ignored', () => {
+    const headers = new Headers({ 'x-forwarded-for': 'junk' });
+    expect(getClientIp(headers, '192.0.2.55')).toBeUndefined();
+  });
+
+  test('from inside the cluster: payload.ip, as the api forwarder sends it', () => {
+    expect(getClientIp(new Headers(), '192.0.2.55')).toBe('192.0.2.55');
+    expect(getClientIp(new Headers(), '2001:db8::7')).toBe('2001:db8::7');
+  });
+
+  test('from inside the cluster with no valid payload.ip: no address', () => {
+    expect(getClientIp(new Headers(), undefined)).toBeUndefined();
+    expect(getClientIp(new Headers(), 'not-an-ip')).toBeUndefined();
   });
 });

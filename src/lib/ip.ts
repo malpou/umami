@@ -109,6 +109,22 @@ export function getIpAddress(headers: Headers) {
   return entries[0];
 }
 
+// metsa: the client address for a collect request. Through the gateway
+// (Envoy always appends X-Forwarded-For, and a client cannot stop it) only the
+// gateway's entry counts, and payload.ip is ignored. A request with no
+// X-Forwarded-For never passed the gateway: it came from inside the cluster,
+// such as the api's widget funnel forwarder, which names the visitor in
+// payload.ip. That is believed when it is a valid address.
+export function getClientIp(headers: Headers, payloadIp?: string | null) {
+  if (headers.has('x-forwarded-for')) {
+    return getIpAddress(headers);
+  }
+
+  const ip = resolveIp(payloadIp?.trim());
+
+  return ip && ipaddr.isValid(ip) ? ip : undefined;
+}
+
 export function stripPort(ip?: string | null) {
   if (!ip) {
     return ip;
