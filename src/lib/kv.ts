@@ -100,6 +100,10 @@ async function openBuckets(): Promise<Buckets> {
     name: 'umami',
     authenticator: getAuthenticator(),
     maxReconnectAttempts: -1,
+    // The auth callout's JWT lasts an hour, so the server drops this client about
+    // hourly and it reconnects with the current token. Without this, two auth errors
+    // in a row on reconnect close the connection for good (nats.js aborts by default).
+    ignoreAuthErrorAbort: true,
   });
 
   try {
@@ -120,12 +124,24 @@ async function openBuckets(): Promise<Buckets> {
 
 let buckets: Promise<Buckets> | null = null;
 
+// A closed connection never comes back, so forget it and let the next call open a new
+// one, instead of failing every call with "closed connection" until the pod restarts.
 function getBuckets() {
   if (!buckets) {
-    buckets = openBuckets().catch(e => {
-      buckets = null;
-      throw e;
-    });
+    const opening = openBuckets();
+    const forget = () => {
+      if (buckets === opening) {
+        buckets = null;
+      }
+    };
+
+    buckets = opening;
+    opening.then(({ nc }) => {
+      nc.closed().then(err => {
+        console.error(`NATS KV connection closed${err ? `: ${err.message}` : ''}`);
+        forget();
+      });
+    }, forget);
   }
 
   return buckets;
