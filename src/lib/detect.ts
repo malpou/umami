@@ -4,7 +4,7 @@ import ipaddr from 'ipaddr.js';
 import isLocalhost from 'is-localhost-ip';
 import maxmind from 'maxmind';
 import { UAParser } from 'ua-parser-js';
-import { getIpAddress, stripPort } from '@/lib/ip';
+import { getClientIp, stripPort } from '@/lib/ip';
 import { safeDecodeURIComponent } from '@/lib/url';
 
 const MAXMIND = 'maxmind';
@@ -135,11 +135,12 @@ export async function getLocation(ip: string = '', headers: Headers, skipHeaders
 
 export async function getClientInfo(request: Request, payload: Record<string, any>) {
   const userAgent = payload?.userAgent || request.headers.get('user-agent');
-  // metsa: the address and its location come from the gateway's
-  // X-Forwarded-For entry only. payload.ip and the CDN location headers
-  // (cf-ipcountry and the rest) are the client's own to write, as Umami runs
-  // with no CDN in front; the location is MaxMind's.
-  const ip = getIpAddress(request.headers);
+  // metsa: the address comes from the gateway's X-Forwarded-For entry, or,
+  // on a request from inside the cluster that never passed the gateway, from
+  // payload.ip (getClientIp). The CDN location headers (cf-ipcountry and the
+  // rest) are the client's own to write, as Umami runs with no CDN in front;
+  // the location is MaxMind's.
+  const ip = getClientIp(request.headers, payload?.ip);
   const location = await getLocation(ip, request.headers, true);
   const country = safeDecodeURIComponent(location?.country);
   const region = safeDecodeURIComponent(location?.region);
